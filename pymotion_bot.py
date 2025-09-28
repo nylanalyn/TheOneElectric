@@ -445,6 +445,18 @@ class PyMotion(IRCBot):
             logging.info("Received 001 welcome message - IRC registration complete")
             self.registered = True
             
+            # Identify with NickServ if configured
+            nickserv_config = self.config.get('nickserv', {})
+            if nickserv_config.get('enabled', False):
+                password = nickserv_config.get('password', '')
+                if password:
+                    # Send IDENTIFY command to NickServ
+                    await self.privmsg('NickServ', f'IDENTIFY {password}')
+                    logging.info("Sent IDENTIFY command to NickServ")
+                    
+                    # Wait a moment for NickServ to respond before continuing
+                    await asyncio.sleep(2)
+            
             # Set user modes if configured
             if self.config.get('modes'):
                 await self.set_mode(self.config['nick'], self.config['modes'])
