@@ -500,6 +500,14 @@ class PyMotion(IRCBot):
             if len(params) >= 1:
                 channel = params[0]
                 nick = source.split('!')[0] if '!' in source else source
+                
+                # Add user to channel tracking
+                if nick != self.config['nick']:
+                    channel_state = self.get_channel_state(channel)
+                    if nick not in channel_state.users:
+                        channel_state.users[nick] = UserState(nick=nick)
+                    logging.debug(f"Added {nick} to {channel} user list")
+                
                 await self.handle_join(nick, channel)
         
         elif command == "PART":
@@ -507,7 +515,45 @@ class PyMotion(IRCBot):
                 channel = params[0]
                 reason = params[1] if len(params) > 1 else ""
                 nick = source.split('!')[0] if '!' in source else source
+                
+                # Remove user from channel tracking
+                if nick != self.config['nick']:
+                    channel_state = self.get_channel_state(channel)
+                    if nick in channel_state.users:
+                        del channel_state.users[nick]
+                        logging.debug(f"Removed {nick} from {channel} user list")
+                
                 await self.handle_part(nick, channel, reason)
+        
+        elif command == "QUIT":
+            if len(params) >= 1:
+                reason = params[0] if len(params) > 0 else ""
+                nick = source.split('!')[0] if '!' in source else source
+                
+                # Remove user from all channel tracking
+                if nick != self.config['nick']:
+                    for channel_state in self.channels_state.values():
+                        if nick in channel_state.users:
+                            del channel_state.users[nick]
+                            logging.debug(f"Removed {nick} from all channels (quit)")
+        
+        elif command == "353":  # NAMES reply
+            if len(params) >= 4:
+                channel = params[2]
+                names_list = params[3]
+                
+                # Parse the names list and add users to channel tracking
+                names = names_list.split()
+                channel_state = self.get_channel_state(channel)
+                
+                for name in names:
+                    # Remove mode prefixes (@, +, etc.)
+                    clean_name = name.lstrip('@+%&~!')
+                    if clean_name and clean_name != self.config['nick']:
+                        if clean_name not in channel_state.users:
+                            channel_state.users[clean_name] = UserState(nick=clean_name)
+                
+                logging.debug(f"Added {len(names)} users to {channel} from NAMES reply")
     
     async def handle_channel_message(self, nick: str, channel: str, message: str):
         """Handle channel messages"""
@@ -530,6 +576,11 @@ class PyMotion(IRCBot):
             with open(self.irc_log_file, 'a', encoding='utf-8') as f:
                 f.write(f"[{timestamp}] [{channel}] <{nick}> {message}\n")
         
+        # Check if message contains other usernames (indicating they're talking ABOUT the bot, not TO it)
+        if self.contains_other_usernames(channel, nick, message):
+            logging.debug(f"Message contains other usernames, ignoring: {message}")
+            return
+        
         # Process through plugins
         for plugin in self.plugins:
             if plugin.enabled:
@@ -545,6 +596,40 @@ class PyMotion(IRCBot):
                     logging.error(f"Error in plugin {plugin.name}: {e}")
                     import traceback
                     logging.error(traceback.format_exc())
+    
+    def contains_other_usernames(self, channel: str, speaker: str, message: str) -> bool:
+        """Check if message contains usernames other than the bot's and speaker's"""
+        # Get list of users in this channel
+        channel_state = self.get_channel_state(channel)
+        
+        # Bot names (including aliases)
+        bot_names = [self.config['nick'].lower()] + [alias.lower() for alias in self.config.get('aliases', [])]
+        
+        # Words in the message
+        words = message.lower().split()
+        
+        # Check each word against known usernames
+        for word in words:
+            # Clean the word (remove punctuation)
+            clean_word = ''.join(c for c in word if c.isalnum())
+            if not clean_word:
+                continue
+                
+            # Skip if it's the speaker's name
+            if clean_word == speaker.lower():
+                continue
+                
+            # Skip if it's one of the bot's names
+            if clean_word in bot_names:
+                continue
+                
+            # Check if it matches any user in the channel
+            for username in channel_state.users:
+                if clean_word == username.lower():
+                    logging.debug(f"Found other username '{username}' in message, filtering out")
+                    return True
+        
+        return False
     
     async def handle_action(self, nick: str, channel: str, action: str):
         """Handle /me actions"""
