@@ -1,0 +1,21 @@
+# PyMotion IRC Bot Requirements
+# Minimal dependencies - this bot is lean and mean!
+
+# For async file operations (used in the code but not strictly necessary)
+aiofiles>=23.0.0
+
+# That's it! The bot uses only Python standard library otherwise.
+# 
+# Optional dependencies for enhanced functionality:
+#
+# For better JSON handling (stdlib json works fine though):
+ujson>=5.0.0
+#
+# For colored logging output:
+colorlog>=6.0.0
+#
+# For configuration validation:
+# pydantic>=2.0.0
+#
+# For SSL/TLS IRC connections:
+certifi>=2023.0.0
