@@ -74,6 +74,12 @@ class IRCBot:
             self.writer.write(f"{message}\r\n".encode())
             await self.writer.drain()
             logging.debug(f"SENT: {message}")
+            
+            # Also log to file if configured
+            if hasattr(self, 'irc_log_file') and self.irc_log_file:
+                timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                with open(self.irc_log_file, 'a', encoding='utf-8') as f:
+                    f.write(f"[{timestamp}] SENT: {message}\n")
     
     async def privmsg(self, target: str, message: str):
         """Send PRIVMSG"""
@@ -139,6 +145,12 @@ class IRCBot:
     async def handle_message(self, line: str):
         """Override this to handle IRC messages"""
         logging.debug(f"RECV: {line}")
+        
+        # Also log to file if configured
+        if hasattr(self, 'irc_log_file') and self.irc_log_file:
+            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            with open(self.irc_log_file, 'a', encoding='utf-8') as f:
+                f.write(f"[{timestamp}] RECV: {line}\n")
         
         # Handle PING
         if line.startswith('PING'):
@@ -230,6 +242,11 @@ class PyMotion(IRCBot):
             format='%(asctime)s - %(levelname)s - %(message)s'
         )
         
+        # Set up IRC logging to file if configured
+        self.irc_log_file = self.config.get('irc_log_file', 'irc_traffic.log')
+        if self.irc_log_file:
+            logging.info(f"IRC traffic will be logged to: {self.irc_log_file}")
+        
         # Initialize plugins
         self.load_plugins()
     
@@ -252,7 +269,8 @@ class PyMotion(IRCBot):
                 "password": ""
             },
             "modes": "+B",  # User modes to set on connect
-            "log_level": "INFO",
+            "irc_log_file": "irc_traffic.log",  # Log all IRC traffic to file
+            "log_level": "DEBUG",  # Set to DEBUG to see everything
             "plugins": {
                 "enabled": ["shutup", "greetings", "random_responses", "actions", "questions", "kill", "random_chatter", "cancel", "quotes", "projectile", "stealth"],
                 "disabled": []
@@ -494,15 +512,27 @@ class PyMotion(IRCBot):
         
         logging.info(f"[{channel}] <{nick}> {message}")
         
+        # Log to IRC file as well
+        if hasattr(self, 'irc_log_file') and self.irc_log_file:
+            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            with open(self.irc_log_file, 'a', encoding='utf-8') as f:
+                f.write(f"[{timestamp}] [{channel}] <{nick}> {message}\n")
+        
         # Process through plugins
         for plugin in self.plugins:
             if plugin.enabled:
                 try:
+                    logging.debug(f"Trying plugin {plugin.name} for message: {message}")
                     handled = await plugin.handle_message(self, nick, channel, message)
                     if handled:
+                        logging.debug(f"Plugin {plugin.name} handled the message")
                         break  # Plugin handled it, stop processing
+                    else:
+                        logging.debug(f"Plugin {plugin.name} did not handle the message")
                 except Exception as e:
                     logging.error(f"Error in plugin {plugin.name}: {e}")
+                    import traceback
+                    logging.error(traceback.format_exc())
     
     async def handle_action(self, nick: str, channel: str, action: str):
         """Handle /me actions"""
