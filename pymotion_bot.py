@@ -323,11 +323,20 @@ class PyMotion(IRCBot):
                 # Find plugin classes in the module
                 plugin_classes = []
                 for name, obj in inspect.getmembers(module):
-                    if (inspect.isclass(obj) and 
-                        hasattr(obj, 'handle_message') and  # Must have handle_message method
-                        hasattr(obj, '__init__') and        # Must be instantiable
-                        obj.__module__ == module.__name__):  # Must be defined in this module
-                        plugin_classes.append(obj)
+                    if inspect.isclass(obj):
+                        logging.debug(f"Found class {name} in {plugin_file}")
+                        if (hasattr(obj, 'handle_message') and  # Must have handle_message method
+                            hasattr(obj, '__init__') and        # Must be instantiable
+                            obj.__module__ == module.__name__):  # Must be defined in this module
+                            plugin_classes.append(obj)
+                            logging.debug(f"Class {name} qualifies as plugin")
+                        else:
+                            logging.debug(f"Class {name} missing required methods or wrong module")
+                            logging.debug(f"  has handle_message: {hasattr(obj, 'handle_message')}")
+                            logging.debug(f"  has __init__: {hasattr(obj, '__init__')}")
+                            logging.debug(f"  module match: {obj.__module__} == {module.__name__}")
+                    else:
+                        logging.debug(f"Found non-class {name} in {plugin_file}: {type(obj)}")
                 
                 # Instantiate plugin classes
                 for plugin_class in plugin_classes:
