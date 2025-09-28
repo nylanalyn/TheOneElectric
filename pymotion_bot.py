@@ -53,13 +53,13 @@ class IRCBot:
             )
             self.connected = True
             
-            # Request capabilities if using SASL
-            if self.config.get('sasl', {}).get('enabled', False):
-                await self.send("CAP LS 302")
-            
             # Send connection sequence
             await self.send(f"NICK {self.config['nick']}")
             await self.send(f"USER {self.config['nick']} 0 * :{self.config['realname']}")
+            
+            # Request capabilities if using SASL
+            if self.config.get('sasl', {}).get('enabled', False):
+                await self.send("CAP LS 302")
             
             ssl_status = "with SSL" if ssl_context else "without SSL"
             logging.info(f"Connected to {self.config['server']}:{port} {ssl_status}")
@@ -442,7 +442,7 @@ class PyMotion(IRCBot):
             self.sasl_in_progress = False
         
         elif command == "001":  # Welcome message
-            logging.info("Connected to IRC server")
+            logging.info("Received 001 welcome message - IRC registration complete")
             self.registered = True
             
             # Set user modes if configured
