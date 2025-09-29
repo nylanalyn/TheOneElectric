@@ -344,21 +344,22 @@ class PyMotion(IRCBot):
                 for name, obj in inspect.getmembers(module):
                     if inspect.isclass(obj):
                         logging.debug(f"Found class {name} in {plugin_file}")
+                        
+                        # Skip main bot classes
+                        if obj.__name__ in ['PyMotion', 'IRCBot', 'Plugin']:
+                            logging.debug(f"Skipping bot/base class {name}")
+                            continue
+                        
+                        # Check if it has the required interface
                         if (hasattr(obj, 'handle_message') and  # Must have handle_message method
                             hasattr(obj, '__init__') and        # Must be instantiable
-                            hasattr(obj, 'name') and            # Must have name attribute (set in __init__)
-                            hasattr(obj, 'priority') and        # Must have priority attribute
-                            obj.__module__ == module.__name__ and  # Must be defined in this module
-                            obj.__name__ != 'PyMotion' and      # Not the main bot class
-                            obj.__name__ != 'IRCBot'):          # Not the IRC base class
+                            obj.__module__ == module.__name__):  # Must be defined in this module
                             plugin_classes.append(obj)
                             logging.debug(f"Class {name} qualifies as plugin")
                         else:
-                            logging.debug(f"Class {name} missing required attributes or wrong module")
+                            logging.debug(f"Class {name} missing required methods or wrong module")
                             logging.debug(f"  has handle_message: {hasattr(obj, 'handle_message')}")
                             logging.debug(f"  has __init__: {hasattr(obj, '__init__')}")
-                            logging.debug(f"  has name: {hasattr(obj, 'name')}")
-                            logging.debug(f"  has priority: {hasattr(obj, 'priority')}")
                             logging.debug(f"  module match: {obj.__module__} == {module.__name__}")
                     else:
                         logging.debug(f"Found non-class {name} in {plugin_file}: {type(obj)}")
