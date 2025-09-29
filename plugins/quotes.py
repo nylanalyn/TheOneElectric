@@ -1,7 +1,6 @@
 """
 Quotes Plugin for PyMotion
-Drops random nerd culture references and bot-original quotes inspired by popular shows.
-Now includes actual quotes from various TV shows and anime.
+Drops random nerd culture references and bot-original quotes inspired by popular shows
 """
 
 import random
@@ -9,14 +8,15 @@ import time
 import logging
 
 class QuotesPlugin:
-    """Randomly quotes nerd culture (bot-original and actual quotes from shows)"""
+    """Randomly quotes nerd culture (bot-original quotes inspired by shows)"""
     
     def __init__(self):
         self.name = "quotes"
         self.priority = 15  # Low priority - just random chatter
         self.enabled = True
         self.last_quote = time.time()
-        self.min_interval = 600  # 10 minutes minimum between quotes
+        self.min_interval = 300  # 5 minutes minimum between quotes
+        self.last_activity = {}  # Track last activity per channel
         
         # Bot-original quotes inspired by nerd culture (not actual copyrighted quotes)
         self.quotes = {
@@ -171,15 +171,35 @@ class QuotesPlugin:
         """Occasionally drop random quotes"""
         now = time.time()
         
+        # Update last activity for this channel
+        if channel not in self.last_activity:
+            self.last_activity[channel] = now
+        
+        time_since_activity = now - self.last_activity[channel]
+        self.last_activity[channel] = now
+        
+        # Calculate dynamic chance based on chat activity
+        base_chance = 0.02  # 2% base chance (up from 0.8%)
+        
+        # If chat has been quiet, increase the chance dramatically
+        if time_since_activity > 600:  # 10 minutes of silence
+            chance = 0.4  # 40% chance when very quiet
+        elif time_since_activity > 300:  # 5 minutes of silence
+            chance = 0.15  # 15% chance when quiet
+        elif time_since_activity > 120:  # 2 minutes of silence
+            chance = 0.08  # 8% chance when somewhat quiet
+        else:
+            chance = base_chance  # Normal 2% chance for active chat
+        
         # Check if enough time has passed and we get lucky with the random chance
         if (now - self.last_quote > self.min_interval and 
-            random.random() < 0.008):  # 0.8% chance per message
+            random.random() < chance):
             
             quote = random.choice(self.all_quotes)
             await bot.privmsg(channel, quote)
             self.last_quote = now
             
-            logging.debug(f"Dropped random quote in {channel}: {quote}")
+            logging.debug(f"Dropped random quote in {channel} (quiet for {time_since_activity:.0f}s, chance was {chance*100:.1f}%): {quote}")
             return True
         
         # Also respond to direct requests for quotes
@@ -224,9 +244,7 @@ class QuotesPlugin:
                 # Select quote from category or all quotes
                 if category and category in self.quotes:
                     quote = random.choice(self.quotes[category])
-                    # Format category name for display
-                    display_category = category.replace("_", " ").title()
-                    await bot.privmsg(channel, f"[{display_category}] {quote}")
+                    await bot.privmsg(channel, f"[{category.upper()}] {quote}")
                 else:
                     quote = random.choice(self.all_quotes)
                     await bot.privmsg(channel, quote)
