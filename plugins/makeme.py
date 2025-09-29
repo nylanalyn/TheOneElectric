@@ -125,6 +125,20 @@ class MakeMePlugin:
                 
                 await self.make_thing(bot, channel, nick, thing)
                 return True
+            
+            # Match "make [user] a/an X" - make something for someone else
+            make_other_match = re.search(rf'(?i)\b{re.escape(bot_name)}\b.*\bmake\s+(\w+)\s+(?:a|an)?\s*(.+)', message)
+            if make_other_match:
+                target = make_other_match.group(1).strip()
+                thing = make_other_match.group(2).strip().rstrip('!?.,')
+                
+                # Don't process empty requests
+                if not thing:
+                    await bot.privmsg(channel, f"{nick}: Make them... what?")
+                    return True
+                
+                await self.make_thing(bot, channel, target, thing)
+                return True
         
         return False
     
