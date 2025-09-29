@@ -272,9 +272,10 @@ class PyMotion(IRCBot):
             "irc_log_file": "irc_traffic.log",  # Log all IRC traffic to file
             "log_level": "DEBUG",  # Set to DEBUG to see everything
             "plugins": {
-                "enabled": ["shutup", "greetings", "random_responses", "actions", "questions", "kill", "random_chatter", "cancel", "quotes", "projectile", "stealth"],
+                "enabled": ["shutup", "admin", "greetings", "random_responses", "actions", "questions", "kill", "random_chatter", "cancel", "quotes", "projectile", "stealth", "decision"],
                 "disabled": []
             },
+            "admins": [],  # Add your IRC nick here for admin commands
             "personality": {
                 "chattiness": 0.3,
                 "friendliness": 0.8,
