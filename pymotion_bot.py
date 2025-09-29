@@ -486,7 +486,11 @@ class PyMotion(IRCBot):
         elif command == "PRIVMSG":
             if len(params) >= 2:
                 target = params[0]
-                message = params[1]
+                message = params[1] if params[1].startswith(':') else f":{params[1]}"
+                
+                # The message text should have the leading colon from IRC protocol
+                # Strip it here before processing
+                message = message.lstrip(':')
                 
                 # Parse nick from source
                 nick = source.split('!')[0] if '!' in source else source
