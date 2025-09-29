@@ -93,9 +93,12 @@ class CancelPlugin:
         # Check if someone is trying to cancel someone
         bot_names = [bot.config['nick'].lower()] + [alias.lower() for alias in bot.config.get('aliases', [])]
         
+        logging.debug(f"Cancel plugin checking message in {channel}: {message}")
+        
         for bot_name in bot_names:
             cancel_match = re.search(rf'(?i)\b{re.escape(bot_name)}\b.*\bcancel\s+(\w+)', message)
             if cancel_match:
+                logging.debug(f"Found cancel command in {channel} from {nick}")
                 target = cancel_match.group(1)
                 
                 # Don't cancel the bot itself or the person doing the cancelling
@@ -106,6 +109,8 @@ class CancelPlugin:
                 # Cancel the target!
                 await self.cancel_user(bot, channel, nick, target)
                 return True
+            else:
+                logging.debug(f"No cancel match found for bot_name: {bot_name}")
         
         return False
     

@@ -578,9 +578,12 @@ class PyMotion(IRCBot):
                 f.write(f"[{timestamp}] [{channel}] <{nick}> {message}\n")
         
         # Check if message contains other usernames (indicating they're talking ABOUT the bot, not TO it)
-        if self.contains_other_usernames(channel, nick, message):
+        contains_others = self.contains_other_usernames(channel, nick, message)
+        if contains_others:
             logging.debug(f"Message contains other usernames, ignoring: {message}")
             return
+        else:
+            logging.debug(f"Message passed username filter in {channel}")
         
         # Process through plugins
         for plugin in self.plugins:
