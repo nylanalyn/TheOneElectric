@@ -71,50 +71,39 @@ class QuotesPlugin:
                 "Search your feelings... and also the error logs"
             ],
             
-            # --- New Section: Actual Quotes from Shows ---
+            # --- Actual Quotes from Shows ---
 
             "invader_zim": [
                 "I'm gonna sing the Doom Song now!",
                 "THE HORRIBLE SINGING! IT BURNS!",
                 "Not scientifically possible!",
-                "I'm a mongoose! The deadliest mongoose of all!",
                 "Why was there bacon in the soap?!",
-                "I am ZIM!"
             ],
 
             "adventure_time": [
                 "What time is it? Adventure Time!",
                 "Sucking at something is the first step towards being sorta good at something.",
                 "Mathematical!",
-                "Oh my Glob!",
-                "Responsibility demands sacrifice.",
-                "Bacon pancakes, makin' bacon pancakes..."
             ],
 
             "big_bang_theory": [
                 "Bazinga!",
                 "That's my spot.",
-                "One cries because one is sad. For example, I cry because others are stupid, and that makes me sad.",
-                "It’s a Saturnalia miracle!",
                 "Scissors cuts paper, paper covers rock, rock crushes lizard..."
             ],
             
             "rick_and_morty": [
                 "Wubba lubba dub dub!",
-                "And that's the way the news goes.",
                 "I'm Pickle Riiick!",
                 "Existence is pain to a Meeseeks, Jerry!",
                 "Get schwifty.",
-                "To live is to risk it all."
             ],
             
             "star_wars_tv": [
                 "This is the Way.",
                 "I can bring you in warm, or I can bring you in cold.",
                 "I have spoken.",
-                "I am on my way. On my way.",
                 "One way out!",
-                "I'd rather die trying to take them down than die giving them what they want."
             ],
             
             "doctor_who": [
@@ -122,43 +111,41 @@ class QuotesPlugin:
                 "Wibbly wobbly, timey wimey... stuff.",
                 "Bow ties are cool.",
                 "Fantastic!",
-                "In 900 years of time and space, I've never met anyone who wasn't important."
             ],
 
             "futurama": [
                 "Good news, everyone!",
                 "Shut up and take my money!",
                 "Bite my shiny metal ass.",
-                "I don't want to live on this planet anymore.",
-                "The spirit is willing, but the flesh is spongy and bruised."
             ],
 
             "the_it_crowd": [
                 "Have you tried turning it off and on again?",
                 "I'm disabled!",
-                "I'll just put this over here, with the rest of the fire.",
                 "0118 999 881 999 119 725... 3!",
-                "People... what a bunch of bastards."
             ],
 
             "anime": [
-                # Naruto
                 "Believe it!",
-                # Dragon Ball Z
                 "It's over nine thousand!",
                 "This isn't even my final form!",
-                # Attack on Titan
                 "If you win, you live. If you lose, you die. If you don't fight, you can't win!",
-                "Dedicate your hearts! (Shinzou wo Sasageyo!)",
-                # Elfen Lied
                 "Aren't we all monsters inside?",
-                # Devilman Crybaby
                 "Love doesn't exist. There is no such thing as love. Therefore, there's no sadness.",
-                # Existing quotes
-                "I choose you, Random Number Generator!",
-                "Notice me, senpai... I mean, admin",
                 "I'll take a potato chip... AND EAT IT!",
-                "This is the choice of Steins;Gate... and also my random function"
+            ],
+
+            # --- NEW SECTION: RICE BOY ---
+            
+            "rice_boy": [
+                "I am The One Electronic. I was sent by the Man-Machine of the West.",
+                "My purpose is to find the Fulfiller of the Prophecy. I have been searching for three hundred years.",
+                "Do you know what it is like to be a machine? It is to be a slave to your purpose.",
+                "Your emotional response is... illogical.",
+                "What is your function?",
+                "A search for a heart is a search for a home.",
+                "The sky is full of spoons.",
+                "I have seen a thousand worlds. I have seen a million suns rise and fall."
             ]
         }
         
@@ -179,72 +166,50 @@ class QuotesPlugin:
         self.last_activity[channel] = now
         
         # Calculate dynamic chance based on chat activity
-        base_chance = 0.02  # 2% base chance (up from 0.8%)
+        base_chance = 0.02
+        if time_since_activity > 600: chance = 0.4
+        elif time_since_activity > 300: chance = 0.15
+        elif time_since_activity > 120: chance = 0.08
+        else: chance = base_chance
         
-        # If chat has been quiet, increase the chance dramatically
-        if time_since_activity > 600:  # 10 minutes of silence
-            chance = 0.4  # 40% chance when very quiet
-        elif time_since_activity > 300:  # 5 minutes of silence
-            chance = 0.15  # 15% chance when quiet
-        elif time_since_activity > 120:  # 2 minutes of silence
-            chance = 0.08  # 8% chance when somewhat quiet
-        else:
-            chance = base_chance  # Normal 2% chance for active chat
-        
-        # Check if enough time has passed and we get lucky with the random chance
-        if (now - self.last_quote > self.min_interval and 
-            random.random() < chance):
-            
+        # Check for random quote drop
+        if (now - self.last_quote > self.min_interval and random.random() < chance):
             quote = random.choice(self.all_quotes)
             await bot.privmsg(channel, quote)
             self.last_quote = now
-            
             logging.debug(f"Dropped random quote in {channel} (quiet for {time_since_activity:.0f}s, chance was {chance*100:.1f}%): {quote}")
             return True
         
-        # Also respond to direct requests for quotes
+        # Check for direct quote requests
         bot_names = [bot.config['nick'].lower()] + [alias.lower() for alias in bot.config.get('aliases', [])]
         
         for bot_name in bot_names:
             if f"{bot_name} quote" in message.lower() or f"{bot_name}, quote" in message.lower():
                 category = None
-                
-                # Check if they want a specific category
                 message_lower = message.lower()
-                if "sci" in message_lower or "space" in message_lower:
-                    category = "sci_fi"
-                elif "fantasy" in message_lower or "magic" in message_lower:
-                    category = "fantasy"
-                elif "anime" in message_lower or "manga" in message_lower:
-                    category = "anime"
-                elif "funny" in message_lower or "comedy" in message_lower:
-                    category = "comedy"
-                elif "game" in message_lower or "gaming" in message_lower:
-                    category = "gaming"
-                elif "tech" in message_lower or "code" in message_lower:
-                    category = "tech"
-                # --- New category matching logic ---
-                elif "zim" in message_lower:
-                    category = "invader_zim"
-                elif "adventure" in message_lower:
-                    category = "adventure_time"
-                elif "bang" in message_lower or "bazinga" in message_lower:
-                    category = "big_bang_theory"
-                elif "rick" in message_lower or "morty" in message_lower:
-                    category = "rick_and_morty"
-                elif "star wars" in message_lower or "mandalorian" in message_lower or "andor" in message_lower:
-                    category = "star_wars_tv"
-                elif "doctor" in message_lower or "who" in message_lower:
-                    category = "doctor_who"
-                elif "futurama" in message_lower or "bender" in message_lower:
-                    category = "futurama"
-                elif "it crowd" in message_lower:
-                    category = "the_it_crowd"
+                
+                if "sci" in message_lower or "space" in message_lower: category = "sci_fi"
+                elif "fantasy" in message_lower or "magic" in message_lower: category = "fantasy"
+                elif "anime" in message_lower or "manga" in message_lower: category = "anime"
+                elif "funny" in message_lower or "comedy" in message_lower: category = "comedy"
+                elif "game" in message_lower or "gaming" in message_lower: category = "gaming"
+                elif "tech" in message_lower or "code" in message_lower: category = "tech"
+                elif "zim" in message_lower: category = "invader_zim"
+                elif "adventure" in message_lower: category = "adventure_time"
+                elif "bang" in message_lower or "bazinga" in message_lower: category = "big_bang_theory"
+                elif "rick" in message_lower or "morty" in message_lower: category = "rick_and_morty"
+                elif "star wars" in message_lower or "mandalorian" in message_lower: category = "star_wars_tv"
+                elif "doctor" in message_lower or "who" in message_lower: category = "doctor_who"
+                elif "futurama" in message_lower or "bender" in message_lower: category = "futurama"
+                elif "it crowd" in message_lower: category = "the_it_crowd"
+                # --- NEW CATEGORY LOGIC ---
+                elif "rice boy" in message_lower or "riceboy" in message_lower or "one electronic" in message_lower:
+                    category = "rice_boy"
 
-                # Select quote from category or all quotes
+                # Select quote
                 if category and category in self.quotes:
                     quote = random.choice(self.quotes[category])
-                    await bot.privmsg(channel, f"[{category.upper()}] {quote}")
+                    await bot.privmsg(channel, f"[{category.replace('_', ' ').upper()}] {quote}")
                 else:
                     quote = random.choice(self.all_quotes)
                     await bot.privmsg(channel, quote)
@@ -254,14 +219,6 @@ class QuotesPlugin:
         
         return False
     
-    async def handle_action(self, bot, nick: str, channel: str, action: str) -> bool:
-        """Handle /me actions - not used by this plugin"""
-        return False
-    
-    async def handle_join(self, bot, nick: str, channel: str):
-        """Handle user joins - not used by this plugin"""
-        pass
-    
-    async def handle_part(self, bot, nick: str, channel: str, reason: str):
-        """Handle user parts - not used by this plugin"""
-        pass
+    async def handle_action(self, bot, nick: str, channel: str, action: str) -> bool: return False
+    async def handle_join(self, bot, nick: str, channel: str): pass
+    async def handle_part(self, bot, nick: str, channel: str, reason: str): pass
