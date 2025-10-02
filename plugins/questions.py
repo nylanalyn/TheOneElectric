@@ -37,29 +37,27 @@ class QuestionPlugin:
     async def handle_message(self, bot, nick: str, channel: str, message: str) -> bool:
         if not message.endswith('?'):
             return False
-        
+
         # Check if bot is mentioned (including aliases)
         bot_names = [bot.config['nick'].lower()] + [alias.lower() for alias in bot.config.get('aliases', [])]
         bot_mentioned = any(bot_name in message.lower() for bot_name in bot_names)
-        
-        # Only respond sometimes and if bot is mentioned or question seems general
-        if not bot_mentioned and random.random() > 0.2:  # 20% chance for general questions
+
+        # Always respond if bot is mentioned, otherwise only 10% of the time
+        if not bot_mentioned and random.random() > 0.1:
             return False
-        
-        if bot_mentioned or random.random() < 0.3:  # 30% chance
-            if re.search(r'(?i)\b(is|are|will|can|could|should|would|do|does|did)\b', message):
-                response = random.choice(self.yes_no_responses)
-            elif re.search(r'(?i)\bwhat\b', message):
-                response = random.choice(self.what_responses)
-            elif re.search(r'(?i)\bwho\b', message):
-                response = random.choice(self.who_responses)
-            else:
-                response = random.choice(self.yes_no_responses)
-            
-            await bot.privmsg(channel, f"{nick}: {response}")
-            return True
-        
-        return False
+
+        # Choose response based on question type
+        if re.search(r'(?i)\b(is|are|will|can|could|should|would|do|does|did)\b', message):
+            response = random.choice(self.yes_no_responses)
+        elif re.search(r'(?i)\bwhat\b', message):
+            response = random.choice(self.what_responses)
+        elif re.search(r'(?i)\bwho\b', message):
+            response = random.choice(self.who_responses)
+        else:
+            response = random.choice(self.yes_no_responses)
+
+        await bot.privmsg(channel, f"{nick}: {response}")
+        return True
     
     async def handle_action(self, bot, nick: str, channel: str, action: str) -> bool:
         return False

@@ -56,8 +56,9 @@ class GreetingPlugin:
         return False
     
     async def handle_join(self, bot, nick: str, channel: str):
-        """Handle user joins - not used by this plugin"""
-        pass
+        """Reset greeting status when user joins"""
+        user_state = bot.get_user_state(channel, nick)
+        user_state.greeted_today = False
     
     async def handle_part(self, bot, nick: str, channel: str, reason: str):
         """Handle user parts - not used by this plugin"""
