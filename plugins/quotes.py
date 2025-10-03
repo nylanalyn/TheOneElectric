@@ -138,7 +138,7 @@ class QuotesPlugin:
             # --- NEW SECTION: RICE BOY ---
             
             "rice_boy": [
-                "I am The One Electronic. I was sent by the Man-Machine of the West.",
+                "I am The One Electric. I was sent by the Man-Machine of the West.",
                 "My purpose is to find the Fulfiller of the Prophecy. I have been searching for three hundred years.",
                 "Do you know what it is like to be a machine? It is to be a slave to your purpose.",
                 "Your emotional response is... illogical.",
