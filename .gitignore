@@ -2,3 +2,8 @@ pymotion.json
 __pycache__
 irc_traffic.log
 .python-version
+
+# Nix
+.direnv/
+result
+result-*
