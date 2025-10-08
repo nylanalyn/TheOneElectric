@@ -1,0 +1,32 @@
+[Unit]
+Description=PyMotion IRC Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/env bash -c 'eval "$(direnv export bash)" && python pymotion_bot.py'
+WorkingDirectory=%h/CODE/TheOneElectric
+
+# Restart policy
+Restart=always
+RestartSec=10
+
+# Environment
+Environment=PYTHONUNBUFFERED=1
+
+# Logging - send all output to systemd journal
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pymotion
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Resource limits
+MemoryMax=256M
+CPUQuota=50%
+
+[Install]
+WantedBy=default.target
