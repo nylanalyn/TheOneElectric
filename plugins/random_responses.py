@@ -76,10 +76,34 @@ class RandomResponsePlugin:
             **self.anger_responses
         }
     
+    def _get_bot_names(self, bot):
+        """Return lowercase bot names including aliases, if any."""
+        return [bot.config['nick'].lower()] + [
+            alias.lower() for alias in bot.config.get('aliases', [])
+        ]
+
+    def _is_addressed_to_bot(self, message: str, bot_names) -> bool:
+        """Determine whether the incoming message addresses the bot directly."""
+        lowered = message.lower()
+        for name in bot_names:
+            # Direct mention anywhere in the message
+            if re.search(r'\b' + re.escape(name) + r'\b', lowered):
+                return True
+            # Messages starting with the name followed by punctuation or whitespace
+            if lowered.startswith(f"{name} ") or lowered.startswith(f"{name},") or lowered.startswith(f"{name}:"):
+                return True
+        return False
+
     async def handle_message(self, bot, nick: str, channel: str, message: str) -> bool:
+        bot_names = self._get_bot_names(bot)
+        addressed_to_bot = self._is_addressed_to_bot(message, bot_names)
+        targeted_response_chance = 0.65  # respond most of the time when spoken to
+        ambient_response_chance = 0.05   # otherwise respond only rarely
+
         # Check for all caps (shouting)
         if len(message) > 5 and message.isupper() and any(c.isalpha() for c in message):
-            if random.random() < 0.3:  # 30% chance to respond
+            chance = 0.25 if addressed_to_bot else 0.03
+            if random.random() < chance:
                 response = random.choice(self.caps_responses)
                 await bot.privmsg(channel, response)
                 return True
@@ -87,7 +111,8 @@ class RandomResponsePlugin:
         # Check other patterns
         for pattern, responses in self.patterns.items():
             if re.search(pattern, message):
-                if random.random() < 0.4:  # 40% chance to respond
+                chance = targeted_response_chance if addressed_to_bot else ambient_response_chance
+                if random.random() < chance:
                     response = random.choice(responses)
                     await bot.privmsg(channel, response)
                     return True

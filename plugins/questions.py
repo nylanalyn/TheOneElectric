@@ -86,12 +86,24 @@ class QuestionPlugin:
         if not message.endswith('?'):
             return False
 
-        # Check if bot is mentioned (including aliases)
-        bot_names = [bot.config['nick'].lower()] + [alias.lower() for alias in bot.config.get('aliases', [])]
-        bot_mentioned = any(bot_name in message.lower() for bot_name in bot_names)
+        # Check if the question is directed at the bot (including aliases)
+        bot_names = [bot.config['nick'].lower()] + [
+            alias.lower() for alias in bot.config.get('aliases', [])
+        ]
+        lowered = message.lower()
 
-        # Always respond if bot is mentioned, otherwise only 10% of the time
-        if not bot_mentioned and random.random() > 0.1:
+        def addressed_to_bot():
+            for name in bot_names:
+                if re.search(r'\b' + re.escape(name) + r'\b', lowered):
+                    return True
+                if lowered.startswith(name) or lowered.startswith(f"{name}:") or lowered.startswith(f"{name},"):
+                    return True
+            return False
+
+        bot_mentioned = addressed_to_bot()
+
+        # Always respond if bot is mentioned, otherwise only 5% of the time
+        if not bot_mentioned and random.random() > 0.05:
             return False
 
         # Choose response based on question type (order matters - check specific types first)
