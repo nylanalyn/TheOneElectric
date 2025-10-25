@@ -18,23 +18,59 @@ class GreetingPlugin:
             r'(?i)\b(hi|hey|hello|yo|greetings|morning|afternoon|evening)\b',
             r'(?i)\b(bonjour|hola|guten tag|konnichiwa)\b'
         ]
+        self.welcome_back_patterns = [
+            r'(?i)\bwelcome back\b',
+            r'(?i)\bwb\b'
+        ]
+        self.thanks_ack_patterns = [
+            r"(?i)\byou(?:'|’)?re welcome\b",
+            r'(?i)\byour welcome\b',
+            r'(?i)\byw\b'
+        ]
         
         self.responses = [
             "Hello {nick}!", "Hey there {nick}!", "Hi {nick}!",
             "Greetings {nick}!", "Well hello {nick}!", "*waves at {nick}*",
             "Oh, hi {nick}!", "Hey {nick}! *beams*", "Hello there, {nick}!"
         ]
+        self.welcome_back_responses = [
+            "Thanks {nick}, it feels good to be back!",
+            "Appreciate the welcome, {nick}!",
+            "Back online and buzzing again—thanks {nick}!",
+            "Missed you too, {nick}! Happy to be back."
+        ]
+        self.thanks_ack_responses = [
+            "Anytime, {nick}!",
+            "Thanks for having my back, {nick}!",
+            "Always appreciate you, {nick}!",
+            "Glad we're synced up, {nick}."
+        ]
     
     async def handle_message(self, bot, nick: str, channel: str, message: str) -> bool:
         """Handle greetings"""
-        # Only respond if message seems to be greeting the bot
+        bot_names = [bot.config['nick'].lower()] + [alias.lower() for alias in bot.config.get('aliases', [])]
+        message_lower = message.lower()
+        bot_mentioned = any(bot_name in message_lower for bot_name in bot_names)
+        directed_at_bot = any(message_lower.startswith(bot_name) for bot_name in bot_names) or bot_mentioned
+
+        if directed_at_bot:
+            if any(re.search(pattern, message) for pattern in self.welcome_back_patterns):
+                response = random.choice(self.welcome_back_responses).format(nick=nick)
+                await bot.privmsg(channel, response)
+                user_state = bot.get_user_state(channel, nick)
+                user_state.last_interaction = "welcome_back_ack"
+                return True
+            
+            if any(re.search(pattern, message) for pattern in self.thanks_ack_patterns):
+                response = random.choice(self.thanks_ack_responses).format(nick=nick)
+                await bot.privmsg(channel, response)
+                user_state = bot.get_user_state(channel, nick)
+                user_state.last_interaction = "gratitude_ack"
+                return True
+
+        # Only respond with greetings if message seems to be greeting the bot
         if not any(re.search(pattern, message) for pattern in self.greeting_patterns):
             return False
-
-        # Check if greeting is directed at bot (including aliases)
-        bot_names = [bot.config['nick'].lower()] + [alias.lower() for alias in bot.config.get('aliases', [])]
-        bot_mentioned = any(bot_name in message.lower() for bot_name in bot_names)
-        directed_at_bot = any(message.lower().startswith(bot_name) for bot_name in bot_names) or bot_mentioned
 
         # Only respond if the bot was explicitly mentioned or addressed
         if directed_at_bot:
