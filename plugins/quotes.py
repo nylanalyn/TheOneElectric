@@ -6,6 +6,7 @@ Drops random nerd culture references and bot-original quotes inspired by popular
 import random
 import time
 import logging
+from collections import deque
 
 class QuotesPlugin:
     """Randomly quotes nerd culture (bot-original quotes inspired by shows)"""
@@ -21,54 +22,58 @@ class QuotesPlugin:
         # Bot-original quotes inspired by nerd culture (not actual copyrighted quotes)
         self.quotes = {
             "sci_fi": [
-                "*beeps in binary*",
-                "I find your lack of coffee disturbing...",
-                "That's not how the Force works!",
-                "I've got a bad feeling about this chat...",
-                "Resistance is futile... but coffee helps",
-                "Live long and prosper, fellow humans",
-                "The truth is out there... probably on Stack Overflow",
-                "With great power comes great electricity bills",
+                "May the Force be with you.",
+                "I find your lack of faith disturbing.",
+                "I've got a bad feeling about this.",
+                "Live long and prosper.",
+                "The needs of the many outweigh the needs of the few.",
+                "I'm sorry, Dave. I'm afraid I can't do that.",
+                "I'll be back.",
+                "There is no spoon.",
             ],
             
             "fantasy": [
-                "You shall not pass... without saying please!",
-                "A wizard is never late, unlike my responses sometimes",
-                "One does not simply walk into production",
-                "My precious... uptime statistics",
-                "I used to be an adventurer, then I took a bug to the knee",
-                "Dragons? Where we're going, we need better firewalls",
-                "The night is dark and full of syntax errors",
+                "You shall not pass!",
+                "A wizard is never late, nor is he early. He arrives precisely when he means to.",
+                "One Ring to rule them all, One Ring to find them.",
+                "My precious.",
+                "Winter is coming.",
+                "Valar morghulis.",
+                "When you play the game of thrones, you win or you die.",
+                "I am fire. I am death.",
             ],
             
             "comedy": [
-                "I'm not procrastinating, I'm doing side quests",
-                "404: Motivation not found",
-                "Ctrl+Z is my favorite superhero",
-                "I don't always test my code, but when I do, I do it in production",
-                "There are only 10 types of people: those who understand binary and those who don't",
-                "I speak fluent sarcasm and broken code",
-                "Error 418: I'm a teapot, not a coffee machine",
+                "I'm not superstitious, but I am a little stitious.",
+                "That's what she said.",
+                "No soup for you!",
+                "We were on a break!",
+                "It's just a flesh wound.",
+                "How you doin'?",
+                "I want to go to there.",
+                "This is fine.",
             ],
             
             "gaming": [
-                "Would you kindly... fix this bug?",
-                "A settlement needs your help! (It's always DNS)",
-                "The cake is a lie, but the documentation is real",
-                "It's dangerous to go alone! Take this rubber duck",
-                "You died... to a null pointer exception",
-                "Press F to pay respects to my crashed server",
-                "Achievement unlocked: Actually reading the manual",
+                "Would you kindly?",
+                "The cake is a lie.",
+                "It's dangerous to go alone! Take this.",
+                "Finish him!",
+                "War. War never changes.",
+                "Stay awhile and listen.",
+                "Do a barrel roll!",
+                "You have died of dysentery.",
             ],
             
             "tech": [
-                "There's always a bigger fish... in the dependency chain",
-                "These aren't the droids you're looking for... try the other API",
-                "Do or do not, there is no try... except in error handling",
-                "Fear leads to anger, anger leads to hate, hate leads to PHP",
-                "Help me, Obi-Wan Kenobi... this documentation is my only hope",
-                "I find your lack of unit tests disturbing",
-                "Search your feelings... and also the error logs"
+                "Talk is cheap. Show me the code.",
+                "Any sufficiently advanced technology is indistinguishable from magic.",
+                "Stay hungry. Stay foolish.",
+                "Programs must be written for people to read, and only incidentally for machines to execute.",
+                "Premature optimization is the root of all evil.",
+                "If debugging is the process of removing software bugs, then programming must be the process of putting them in.",
+                "Never trust a computer you can't throw out a window.",
+                "To err is human, but to really foul things up you need a computer."
             ],
             
             # --- Actual Quotes from Shows ---
@@ -153,6 +158,37 @@ class QuotesPlugin:
         self.all_quotes = []
         for category, quote_list in self.quotes.items():
             self.all_quotes.extend(quote_list)
+        
+        # Track usage to balance variety
+        self.quote_usage = {quote: 0 for quote in self.all_quotes}
+        self.recent_global = deque(maxlen=10)
+        self.recent_by_category = {category: deque(maxlen=3) for category in self.quotes}
+    
+    def _select_quote(self, source_list, category: str = None) -> str:
+        """Pick a quote biased toward least-used options and avoid recent repeats."""
+        if not source_list:
+            return ""
+        
+        recent_set = set(self.recent_global)
+        if category and category in self.recent_by_category:
+            recent_set |= set(self.recent_by_category[category])
+        
+        candidates = [quote for quote in source_list if quote not in recent_set]
+        if not candidates:
+            candidates = list(source_list)
+        
+        for quote in candidates:
+            self.quote_usage.setdefault(quote, 0)
+        
+        min_usage = min(self.quote_usage[quote] for quote in candidates)
+        least_used = [quote for quote in candidates if self.quote_usage[quote] == min_usage]
+        quote = random.choice(least_used)
+        self.quote_usage[quote] = self.quote_usage.get(quote, 0) + 1
+        
+        if category and category in self.recent_by_category:
+            self.recent_by_category[category].append(quote)
+        self.recent_global.append(quote)
+        return quote
     
     async def handle_message(self, bot, nick: str, channel: str, message: str) -> bool:
         """Occasionally drop random quotes"""
@@ -174,7 +210,7 @@ class QuotesPlugin:
         
         # Check for random quote drop
         if (now - self.last_quote > self.min_interval and random.random() < chance):
-            quote = random.choice(self.all_quotes)
+            quote = self._select_quote(self.all_quotes)
             await bot.privmsg(channel, quote)
             self.last_quote = now
             logging.debug(f"Dropped random quote in {channel} (quiet for {time_since_activity:.0f}s, chance was {chance*100:.1f}%): {quote}")
@@ -208,10 +244,10 @@ class QuotesPlugin:
 
                 # Select quote
                 if category and category in self.quotes:
-                    quote = random.choice(self.quotes[category])
+                    quote = self._select_quote(self.quotes[category], category)
                     await bot.privmsg(channel, f"[{category.replace('_', ' ').upper()}] {quote}")
                 else:
-                    quote = random.choice(self.all_quotes)
+                    quote = self._select_quote(self.all_quotes)
                     await bot.privmsg(channel, quote)
                 
                 self.last_quote = now
