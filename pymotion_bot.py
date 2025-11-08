@@ -194,6 +194,7 @@ class ChannelState:
     name: str
     users: Dict[str, UserState] = field(default_factory=dict)
     last_activity: float = field(default_factory=time.time)
+    previous_activity: float = field(default_factory=time.time)
     topic: str = ""
     mood: float = 0.5  # 0.0 = depressed, 1.0 = euphoric
 
@@ -572,9 +573,13 @@ class PyMotion(IRCBot):
         if nick == self.config['nick']:
             return  # Ignore our own messages
         
+        now = time.time()
+        channel_state = self.get_channel_state(channel)
+        channel_state.previous_activity = channel_state.last_activity
+        
         # Update user state
         user_state = self.get_user_state(channel, nick)
-        user_state.last_seen = time.time()
+        user_state.last_seen = now
         
         # Reset daily greeting flag if it's a new day
         if datetime.now().date() != datetime.fromtimestamp(user_state.last_seen).date():
@@ -616,6 +621,8 @@ class PyMotion(IRCBot):
         
         # Log summary of plugin attempts
         logging.debug(f"[{channel}] Plugin results: {', '.join(plugin_results)}")
+        
+        channel_state.last_activity = now
     
     def contains_other_usernames(self, channel: str, speaker: str, message: str) -> bool:
         """Check if message contains usernames other than the bot's and speaker's"""

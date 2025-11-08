@@ -83,6 +83,10 @@ class QuotesPlugin:
                 "THE HORRIBLE SINGING! IT BURNS!",
                 "Not scientifically possible!",
                 "Why was there bacon in the soap?!",
+                "KNEEL BEFORE ZIM!",
+                "My tallest, this plan is terrible and amazing.",
+                "I put the fires out. You made them worse! Worse... or better?",
+                "I miss shouting 'OBEY ME' at random passersby.",
             ],
 
             "adventure_time": [
@@ -122,6 +126,46 @@ class QuotesPlugin:
                 "Good news, everyone!",
                 "Shut up and take my money!",
                 "Bite my shiny metal ass.",
+            ],
+
+            "spongebob": [
+                "I'm ready! I'm ready! I'm ready!",
+                "Is mayonnaise an instrument?",
+                "The inner machinations of my mind are an enigma.",
+                "CHOCOLATE!!!",
+                "No, this is Patrick!",
+                "Firmly grasp it!",
+                "I don't need it. I definitely don't need it... I NEED IT!",
+            ],
+
+            "johnny_homicidal": [
+                "Nailbunny says the void is hungry tonight.",
+                "Sometimes I can hear the walls screaming back.",
+                "My brain is a bad neighborhood and I'm the only cop on duty.",
+                "Art is a scalpel; reality is the patient.",
+                "Have you ever tasted static? It's salty.",
+                "Sarcasm is my mother tongue.",
+            ],
+
+            "metalhead": [
+                "By Odin's beard, drop the bass and raise the horns!",
+                "Double-kick drums cure most existential dread.",
+                "All hail the riff, breaker of chains and amps.",
+                "Blast beats are just heartbeats with ambition.",
+                "If it isn't tuned to drop C, is it even trying?",
+                "Growl now, ask questions later.",
+                "Raise your horns, hydrate, and stretch before the pit.",
+            ],
+
+            "evil_dead": [
+                "Groovy.",
+                "Shop smart. Shop S-Mart.",
+                "Good. Bad. I'm the one with the boomstick.",
+                "Hail to the king, baby.",
+                "This... is my BOOMSTICK!",
+                "Klaatu... barada... *cough*",
+                "Gimme some sugar, baby.",
+                "Yo, she-bitch! Let's go.",
             ],
 
             "the_it_crowd": [
@@ -238,6 +282,14 @@ class QuotesPlugin:
                 elif "doctor" in message_lower or "who" in message_lower: category = "doctor_who"
                 elif "futurama" in message_lower or "bender" in message_lower: category = "futurama"
                 elif "it crowd" in message_lower: category = "the_it_crowd"
+                elif "sponge" in message_lower or "patrick" in message_lower or "bikini bottom" in message_lower:
+                    category = "spongebob"
+                elif "johnny" in message_lower or "homicidal" in message_lower or "nny" in message_lower:
+                    category = "johnny_homicidal"
+                elif "metal" in message_lower or "mosh" in message_lower or "riff" in message_lower:
+                    category = "metalhead"
+                elif "evil dead" in message_lower or "ash" in message_lower or "boomstick" in message_lower:
+                    category = "evil_dead"
                 # --- NEW CATEGORY LOGIC ---
                 elif "rice boy" in message_lower or "riceboy" in message_lower or "one electronic" in message_lower:
                     category = "rice_boy"

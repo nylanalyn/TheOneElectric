@@ -13,8 +13,9 @@ class RandomChatterPlugin:
         self.name = "random_chatter"
         self.priority = 10
         self.enabled = True
-        self.last_chatter = time.time()
+        self.channel_last_chatter = {}
         self.min_interval = 300  # 5 minutes minimum between random chatter
+        self.idle_threshold = 180  # only chatter if channel quiet for 3 minutes
         
         self.random_phrases = [
             "*yawns*", "*stretches*", "*looks around*", "*hums quietly*",
@@ -25,14 +26,29 @@ class RandomChatterPlugin:
         ]
     
     async def handle_message(self, bot, nick: str, channel: str, message: str) -> bool:
-        # Very low chance of random chatter, and only if enough time has passed
         now = time.time()
-        if (now - self.last_chatter > self.min_interval and 
-            random.random() < 0.005):  # 0.5% chance
-            
+        channel_state = bot.get_channel_state(channel)
+        previous_activity = getattr(channel_state, "previous_activity", 0.0)
+        
+        # Require a stretch of silence before chatting
+        if previous_activity <= 0:
+            return False
+        
+        idle_time = now - previous_activity
+        if idle_time < self.idle_threshold:
+            return False
+        
+        last_chatter = self.channel_last_chatter.get(channel.lower(), 0.0)
+        if now - last_chatter < self.min_interval:
+            return False
+        
+        # Probability increases with idle time, capped for sanity
+        idle_factor = min(1.0, (idle_time - self.idle_threshold) / (self.idle_threshold * 2))
+        chance = max(0.02, idle_factor * 0.18)
+        if random.random() < chance:
             response = random.choice(self.random_phrases)
             await bot.privmsg(channel, response)
-            self.last_chatter = now
+            self.channel_last_chatter[channel.lower()] = now
             return True
         
         return False
