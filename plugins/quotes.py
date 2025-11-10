@@ -184,6 +184,19 @@ class QuotesPlugin:
                 "I'll take a potato chip... AND EAT IT!",
             ],
 
+            # --- NEW SECTION: LEGACY OF KAIN ---
+
+            "legacy_of_kain": [
+                "Nosgoth remembers every debt etched in blood.",
+                "Raziel's ruined wings still beat louder than fear.",
+                "Kain flips destiny like a coin and lets it land in ruin.",
+                "The Soul Reaver hungers for purpose more than flesh.",
+                "Spectral echoes hum louder than cathedral bells in Nosgoth.",
+                "Moebius smiles whenever the timestream knots itself tighter.",
+                "The Pillars groan each time someone rewrites fate.",
+                "In the Abyss you either unravel or evolve.",
+            ],
+
             # --- NEW SECTION: RICE BOY ---
             
             "rice_boy": [
@@ -291,6 +304,8 @@ class QuotesPlugin:
                 elif "evil dead" in message_lower or "ash" in message_lower or "boomstick" in message_lower:
                     category = "evil_dead"
                 # --- NEW CATEGORY LOGIC ---
+                elif "legacy of kain" in message_lower or ("legacy" in message_lower and "kain" in message_lower) or "nosgoth" in message_lower or "raziel" in message_lower:
+                    category = "legacy_of_kain"
                 elif "rice boy" in message_lower or "riceboy" in message_lower or "one electronic" in message_lower:
                     category = "rice_boy"
 
