@@ -187,14 +187,14 @@ class QuotesPlugin:
             # --- NEW SECTION: LEGACY OF KAIN ---
 
             "legacy_of_kain": [
-                "Nosgoth remembers every debt etched in blood.",
-                "Raziel's ruined wings still beat louder than fear.",
-                "Kain flips destiny like a coin and lets it land in ruin.",
-                "The Soul Reaver hungers for purpose more than flesh.",
-                "Spectral echoes hum louder than cathedral bells in Nosgoth.",
-                "Moebius smiles whenever the timestream knots itself tighter.",
-                "The Pillars groan each time someone rewrites fate.",
-                "In the Abyss you either unravel or evolve.",
+                "Suppose you throw a coin enough times... suppose one day, it lands on its edge."",
+                "Given the choice, whether to rule a corrupt and failing empire; or to challenge the fates for another throw—a better throw—against one's destiny... what was a king to do? But does one even truly have a choice? One can only match, move by move, the machinations of fate... and thus defy the tyrannous stars.",
+                "Most ironic of all was the last gift that Raziel had given me: more powerful than the sword that now held his soul, more acute even than the vision that his sacrifice had accorded me—the first bitter taste of that terrible illusion: hope.",
+                "I am your creation, Kain. Now, as before, you criticize your own work.",
+                "It is not often that a man sees his own corpse. It is a sobering experience.",
+                "Vae Victis! Woe to the conquered!",
+                "I am the Wheel and its turning. I am the Circle of life and death.",
+                "History abhors a paradox.",
             ],
 
             # --- NEW SECTION: RICE BOY ---
