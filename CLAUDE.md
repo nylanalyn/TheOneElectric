@@ -52,7 +52,8 @@ Plugins live in `plugins/` directory and inherit from the `Plugin` base class (p
 1. **shutup** (priority 100) - Silences bot for 5 minutes, blocks all other plugins when active
 2. **admin** (priority 90) - Admin commands: reload, status
 3. **makeme** (priority 60) - Crafts items or transforms users with comedic outcomes
-4. Lower priority plugins: greetings, random_responses, actions, questions, kill, random_chatter, cancel, quotes, projectile, stealth, decision
+4. **random_sentences** (priority 12) - Generates random sentences using templates with placeholders
+5. Lower priority plugins: greetings, random_responses, actions, questions, kill, random_chatter, cancel, quotes, projectile, stealth, decision
 
 **Key Plugin Mechanics:**
 - Plugins are sorted by priority (highest first) in `load_plugins()` (pymotion_bot.py:383)
