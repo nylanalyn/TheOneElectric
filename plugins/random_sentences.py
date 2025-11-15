@@ -1,15 +1,38 @@
 """
 Random Sentences Plugin for PyMotion
-Generates random sentences using templates with placeholders
+Generates random but natural-sounding sentences by mixing structured fragments.
 """
 
 import random
 import time
 import logging
+from dataclasses import dataclass
 from collections import deque
 
+
+@dataclass(frozen=True)
+class Activity:
+    """Verb forms used to keep tense consistent."""
+    gerund: str
+    past: str
+    infinitive: str
+
+
+@dataclass(frozen=True)
+class Place:
+    """Location plus default preposition for fluent phrasing."""
+    name: str
+    default_preposition: str = "at"
+
+    def describe(self, prefix: str | None = None) -> str:
+        preposition = self.default_preposition if prefix is None else prefix
+        if not preposition:
+            return self.name
+        return f"{preposition} {self.name}"
+
+
 class RandomSentencesPlugin:
-    """Generates random sentences using templates with placeholders"""
+    """Generates random sentences using structured templates and word lists."""
     
     def __init__(self):
         self.name = "random_sentences"
@@ -32,25 +55,44 @@ class RandomSentencesPlugin:
         ]
         
         self.places = [
-            "the abandoned library", "the enchanted forest", "the bustling marketplace",
-            "the ancient ruins", "the underground cave", "the floating island",
-            "the clockwork city", "the misty mountains", "the crystal desert",
-            "the forgotten temple", "the rainbow bridge", "the whispering woods",
-            "the bottom of a well", "the back of a cupboard", "under the sofa",
-            "in the fridge", "behind the shed", "atop a very tall tree",
-            "inside a hollow log", "buried in the garden", "stuck in a vending machine",
-            "floating in a puddle", "wedged between couch cushions", "in the pocket of last year's coat"
+            Place("the abandoned library", "in"),
+            Place("the enchanted forest", "in"),
+            Place("the bustling marketplace", "at"),
+            Place("the ancient ruins", "among"),
+            Place("the underground observatory", "inside"),
+            Place("the floating island", "on"),
+            Place("the clockwork city", "around"),
+            Place("the misty mountains", "through"),
+            Place("the crystal desert", "across"),
+            Place("the forgotten temple", "inside"),
+            Place("the whispering woods", "in"),
+            Place("the rooftop garden", "on"),
+            Place("the lantern-lit alley", "in"),
+            Place("the seaside observatory", "at"),
+            Place("the underground archive", "inside"),
+            Place("the midnight bakery", "inside"),
+            Place("the quiet workshop", "inside"),
+            Place("the sleepy harbor", "around"),
+            Place("the hillside café", "at"),
+            Place("the old tram depot", "inside"),
         ]
-        
-        self.verbs = [
-            "danced", "sang", "argued", "negotiated", "played chess", "had a picnic",
-            "discussed philosophy", "shared secrets", "told jokes", "debated politics",
-            "exchanged recipes", "compared collections", "planned heists", "wrote poetry",
-            "built a fort", "organized a protest", "started a band", "opened a bakery",
-            "invented a language", "discovered gravity", "rearranged the furniture",
-            "tried to bake a cake", "attempted synchronized swimming", "practiced interpretive dance",
-            "had a staring contest", "played hide and seek", "told ghost stories", 
-            "made friendship bracelets", "learned to juggle", "started a book club"
+
+        self.activities = [
+            Activity("repairing", "repaired", "repair"),
+            Activity("studying", "studied", "study"),
+            Activity("collecting", "collected", "collect"),
+            Activity("mapping", "mapped", "map"),
+            Activity("sketching", "sketched", "sketch"),
+            Activity("researching", "researched", "research"),
+            Activity("composing", "composed", "compose"),
+            Activity("cooking", "cooked", "cook"),
+            Activity("rehearsing", "rehearsed", "rehearse"),
+            Activity("teaching", "taught", "teach"),
+            Activity("experimenting", "experimented", "experiment"),
+            Activity("restoring", "restored", "restore"),
+            Activity("explaining", "explained", "explain"),
+            Activity("debating", "debated", "debate"),
+            Activity("navigating", "navigated", "navigate"),
         ]
         
         self.people = [
@@ -71,28 +113,38 @@ class RandomSentencesPlugin:
             "melancholy", "bewildered", "content", "anxious", "gleeful", "grumpy"
         ]
         
+        self.intros = [
+            "Earlier today",
+            "Apparently",
+            "Rumor has it",
+            "For reasons I can't explain",
+            "Just between us",
+            "Out of nowhere",
+            "When nobody was looking",
+        ]
+
+        self.observations = [
+            "the entire moment felt {emotion}",
+            "the air kept turning {emotion}",
+            "it left everyone surprisingly {emotion}",
+            "we all wound up oddly {emotion}",
+            "the silence turned distinctly {emotion}",
+            "everybody nearby went a little {emotion}",
+            "I couldn't help feeling {emotion}",
+        ]
+        
         # Sentence templates with placeholders
         self.templates = [
-            "I found {thing} at {place}. Should never have {verb} with it.",
-            "Yesterday I met {person} who was feeling {emotion}. We ended up {verb} together.",
-            "If you ever find {thing} in {place}, be careful not to {verb}.",
-            "{Person} told me they once found {thing} while {verb} in {place}.",
-            "I wonder what would happen if I {verb} with {thing} from {place}.",
-            "Remember that time {person} tried to {verb} with {thing}? It was {emotion}.",
-            "I'm feeling {emotion} about {thing} I discovered in {place}.",
-            "{Person} and I are planning to {verb} using {thing} we found at {place}.",
-            "Never trust {person} who wants to {verb} with {thing} from {place}.",
-            "The secret to {verb} is having the right {thing} and being in {place}.",
-            "I once saw {person} {verb} with {thing} in {place}. It was {emotion}.",
-            "If I had {thing} from {place}, I would definitely {verb} with {person}.",
-            "{Person} claims that {verb} with {thing} makes them feel {emotion}.",
-            "I'm not sure why, but {thing} from {place} always makes me want to {verb}.",
-            "The legend says that {person} will {verb} with {thing} when they find {place}.",
-            "I feel {emotion} whenever I think about {verb} with {thing} in {place}.",
-            "{Person} taught me that {verb} requires {thing} and the right {place}.",
-            "I dreamt that {person} and I were {verb} with {thing} at {place}.",
-            "The best part of {place} is finding {thing} and then {verb}.",
-            "{Person} says that {verb} with {thing} in {place} is {emotion}."
+            "{intro}, {subject} was {activity_gerund} with {thing} {place_setting}, and {observation}.",
+            "I bumped into {subject} {place_setting} right after they {activity_past} {thing}; {observation}.",
+            "Rumor has it {subject} convinced {companion} to {activity_infinitive} {thing} {place_setting}, which left them both {emotion}.",
+            "Whenever we're {place_setting}, {subject} insists on {activity_gerund} beside {thing}, and it always feels {emotion}.",
+            "{subject} asked {companion} to help {activity_infinitive} {thing} {place_setting}, and the plan somehow turned out {emotion}.",
+            "{intro}, {subject} quietly {activity_past} {thing} {place_setting} while {companion} took notes, and the whole room went {emotion}.",
+            "Back when we visited {place_plain}, {subject} kept {activity_gerund} with {companion} until {thing} finally cooperated, and that memory remains {emotion}.",
+            "People still talk about how {subject} {activity_past} {thing} {place_setting} while {companion} narrated the whole thing, leaving the crowd {emotion}.",
+            "On the way to {place_plain}, {subject} insisted we {activity_infinitive} with {thing}, and somehow it made everyone {emotion}.",
+            "{intro}, {subject} reserved {place_plain} just so they could {activity_infinitive} {thing}, and honestly everyone stayed {emotion} about it.",
         ]
         
         # Track usage to balance variety
@@ -100,26 +152,31 @@ class RandomSentencesPlugin:
         self.recent_sentences = deque(maxlen=8)
     
     def _generate_sentence(self) -> str:
-        """Generate a random sentence using templates and word lists"""
+        """Generate a random sentence using templates and word lists."""
         template = random.choice(self.templates)
-        
-        # Capitalize person if it's at the start of sentence
-        if template.startswith("{person}"):
-            person = random.choice(self.people).capitalize()
-        else:
-            person = random.choice(self.people)
-        
-        # Fill placeholders
-        sentence = template.format(
-            thing=random.choice(self.things),
-            place=random.choice(self.places),
-            verb=random.choice(self.verbs),
-            person=person,
-            emotion=random.choice(self.emotions),
-            Person=random.choice(self.people).capitalize()  # For capitalized versions
-        )
-        
-        return sentence
+        activity = random.choice(self.activities)
+        place = random.choice(self.places)
+        emotion = random.choice(self.emotions)
+        subject = random.choice(self.people)
+        companion = random.choice(self.people)
+        if companion == subject and len(self.people) > 1:
+            alternatives = [p for p in self.people if p != subject]
+            companion = random.choice(alternatives)
+
+        data = {
+            "intro": random.choice(self.intros),
+            "subject": subject,
+            "companion": companion,
+            "thing": random.choice(self.things),
+            "emotion": emotion,
+            "observation": random.choice(self.observations).format(emotion=emotion),
+            "place_setting": place.describe(),
+            "place_plain": place.name,
+            "activity_gerund": activity.gerund,
+            "activity_past": activity.past,
+            "activity_infinitive": activity.infinitive,
+        }
+        return template.format(**data)
     
     def _select_sentence(self) -> str:
         """Pick a sentence biased toward least-used options and avoid recent repeats"""
