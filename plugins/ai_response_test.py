@@ -7,7 +7,7 @@ This version works without httpx for testing purposes
 import re
 import random
 import time
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import logging
 
 class AIResponsePlugin:
@@ -24,6 +24,7 @@ class AIResponsePlugin:
             "openrouter_api_url": "https://openrouter.ai/api/v1/chat/completions",
             "model": "mistralai/mistral-7b-instruct:free",  # Free model
             "max_response_length": 150,  # IRC character limit
+            "max_response_attempts": 3,  # Retry to get within max length
             "response_probability": 0.6,  # 60% chance to respond when triggered
             "cooldown_seconds": 30,  # Cooldown between AI responses per user
             "enabled_channels": [],  # Empty list means all channels
@@ -156,6 +157,9 @@ class AIResponsePlugin:
             truncated += "..."
         
         return truncated.strip()
+
+    def _is_response_within_limits(self, response: str) -> bool:
+        return len(response) <= self.config['max_response_length']
     
     async def _call_openrouter_api(self, prompt: str, context: str = "") -> str:
         """Mock OpenRouter API call for testing"""
@@ -177,6 +181,29 @@ class AIResponsePlugin:
             return "I'd be happy to tell you about that! It's a complex topic with many aspects to consider."
         else:
             return "That's a great question! I'll think about it and get back to you with a thoughtful response."
+
+    async def _get_response_with_retries(self, prompt: str, context: str = "") -> str:
+        max_length = int(self.config['max_response_length'])
+        max_attempts = max(1, int(self.config.get("max_response_attempts", 3)))
+
+        last_response: Optional[str] = None
+        for attempt in range(1, max_attempts + 1):
+            if attempt == 1:
+                attempt_prompt = prompt
+            else:
+                prev_len = len(last_response) if last_response is not None else 0
+                attempt_prompt = (
+                    f"{prompt}\n\n"
+                    f"Constraint: Reply in {max_length} characters or fewer.\n"
+                    f"Your previous reply was {prev_len} characters.\n"
+                    "Return ONLY the corrected shorter reply."
+                )
+
+            last_response = await self._call_openrouter_api(attempt_prompt, context)
+            if self._is_response_within_limits(last_response):
+                return last_response
+
+        return last_response or "I'm not sure how to respond to that."
     
     async def handle_message(self, bot, nick: str, channel: str, message: str) -> bool:
         """Handle messages and provide AI responses when appropriate"""
@@ -217,10 +244,8 @@ class AIResponsePlugin:
         
         # Call OpenRouter API (mock version)
         try:
-            ai_response = await self._call_openrouter_api(prompt, context)
-            
-            # Truncate response to fit IRC limits
-            final_response = self._truncate_response(ai_response)
+            ai_response = await self._get_response_with_retries(prompt, context)
+            final_response = ai_response if self._is_response_within_limits(ai_response) else self._truncate_response(ai_response)
             
             # Send response
             await bot.privmsg(channel, final_response)

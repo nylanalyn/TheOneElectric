@@ -235,6 +235,7 @@ class PyMotion(IRCBot):
         self.channels_state: Dict[str, ChannelState] = {}
         self.plugins: List[Plugin] = []
         self.start_time = time.time()
+        self.background_tasks: set[asyncio.Task] = set()
         
         # Set up logging first
         log_level = getattr(logging, self.config.get('log_level', 'INFO').upper())
@@ -250,6 +251,60 @@ class PyMotion(IRCBot):
         
         # Initialize plugins
         self.load_plugins()
+    
+    def create_background_task(self, coro, name: str | None = None) -> asyncio.Task:
+        task = asyncio.create_task(coro, name=name)
+        self.background_tasks.add(task)
+        
+        def _on_done(done_task: asyncio.Task):
+            self.background_tasks.discard(done_task)
+            try:
+                done_task.result()
+            except asyncio.CancelledError:
+                pass
+            except Exception as e:
+                logging.error(f"Background task failed ({getattr(done_task, 'get_name', lambda: 'task')()}): {e}")
+        
+        task.add_done_callback(_on_done)
+        return task
+    
+    async def _cancel_background_tasks(self):
+        if not self.background_tasks:
+            return
+        tasks = list(self.background_tasks)
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        self.background_tasks.clear()
+    
+    async def start_plugins(self):
+        """Start plugins that expose a start() hook."""
+        for plugin in self.plugins:
+            if not plugin.enabled:
+                continue
+            start_fn = getattr(plugin, "start", None)
+            if not start_fn:
+                continue
+            try:
+                result = start_fn(self)
+                if inspect.isawaitable(result):
+                    await result
+            except Exception as e:
+                logging.error(f"Error starting plugin {plugin.name}: {e}")
+    
+    async def reload_config_and_plugins(self):
+        """Reload config and plugins with cleanup, for hot-reload."""
+        await self._cancel_background_tasks()
+        for plugin in self.plugins:
+            if hasattr(plugin, "cleanup"):
+                try:
+                    await plugin.cleanup()
+                except Exception as e:
+                    logging.error(f"Error cleaning up plugin {plugin.name}: {e}")
+        
+        self.config = self.load_config()
+        self.load_plugins()
+        await self.start_plugins()
     
     def load_config(self) -> Dict[str, Any]:
         """Load configuration from JSON file"""
@@ -273,7 +328,7 @@ class PyMotion(IRCBot):
             "irc_log_file": "irc_traffic.log",  # Log all IRC traffic to file
             "log_level": "DEBUG",  # Set to DEBUG to see everything
             "plugins": {
-                "enabled": ["shutup", "admin", "greetings", "random_responses", "actions", "questions", "kill", "random_chatter", "cancel", "quotes", "projectile", "stealth", "decision", "makeme", "ai_response_test"],
+                "enabled": ["shutup", "admin", "greetings", "random_responses", "actions", "questions", "kill", "random_chatter", "cancel", "quotes", "projectile", "stealth", "decision", "makeme", "liljon", "ai_response_test"],
                 "disabled": []
             },
             "ai_response": {
@@ -498,6 +553,8 @@ class PyMotion(IRCBot):
                     key = channel_config.get('key')
                     if channel:
                         await self.join_channel(channel, key)
+            
+            await self.start_plugins()
         
         elif command == "PRIVMSG":
             if len(params) >= 2:
@@ -740,6 +797,7 @@ class PyMotion(IRCBot):
             logging.error(f"Bot error: {e}")
         finally:
             # Clean up plugins
+            await self._cancel_background_tasks()
             for plugin in self.plugins:
                 if hasattr(plugin, 'cleanup'):
                     try:

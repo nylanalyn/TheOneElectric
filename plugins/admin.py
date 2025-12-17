@@ -31,13 +31,8 @@ class AdminPlugin:
                 
                 try:
                     await bot.privmsg(channel, "Reloading configuration and plugins...")
-                    
-                    # Reload config
                     old_config = bot.config.copy()
-                    bot.config = bot.load_config()
-                    
-                    # Reload plugins
-                    bot.load_plugins()
+                    await bot.reload_config_and_plugins()
                     
                     await bot.privmsg(channel, f"✅ Reload complete! Loaded {len(bot.plugins)} plugins.")
                     logging.info(f"Bot reloaded by {nick}")

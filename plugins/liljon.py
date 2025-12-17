@@ -6,6 +6,7 @@ Only active in #crunk - responds to !GETCRUNK and sends random quotes periodical
 import random
 import time
 import asyncio
+import logging
 
 class LilJonPlugin:
     """Brings the crunkness of Lil Jon to #crunk"""
@@ -21,9 +22,9 @@ class LilJonPlugin:
         self.cooldown_duration = 300  # 5 minutes in seconds
         self.last_triggered_time = 0
 
-        # Passive quote timing
-        self.last_passive_quote = 0
-        self.next_passive_delay = self._get_random_delay()
+        # Passive quote timing (every 15 minutes)
+        self.passive_interval_seconds = 15 * 60
+        self._passive_task: asyncio.Task | None = None
 
         # Lil Jon's greatest hits
         self.quotes = [
@@ -72,13 +73,20 @@ class LilJonPlugin:
             "FIRE IT UP!"
         ]
 
-    def _get_random_delay(self):
-        """Get a random delay between 15 and 45 minutes (in seconds)"""
-        return random.randint(900, 2700)
+    async def start(self, bot):
+        if self._passive_task and not self._passive_task.done():
+            return
+        if hasattr(bot, "create_background_task"):
+            self._passive_task = bot.create_background_task(
+                self._passive_quote_loop(bot),
+                name="liljon_passive_quote_loop",
+            )
+        else:
+            self._passive_task = asyncio.create_task(self._passive_quote_loop(bot))
 
     async def handle_message(self, bot, nick: str, channel: str, message: str) -> bool:
         # Only active in #crunk
-        if channel.lower() != self.target_channel:
+        if channel.lower() != self.target_channel.lower():
             return False
 
         now = time.time()
@@ -92,23 +100,12 @@ class LilJonPlugin:
             # Always return True in #crunk to block other plugins
             return True
 
-        # Check if it's time for a passive quote
-        if self.last_passive_quote == 0:
-            # First message since bot started, initialize the timer
-            self.last_passive_quote = now
-        elif (now - self.last_passive_quote) > self.next_passive_delay:
-            # Time for a random quote!
-            quote = random.choice(self.quotes)
-            await bot.privmsg(channel, quote)
-            self.last_passive_quote = now
-            self.next_passive_delay = self._get_random_delay()
-
         # Return True to block all other plugins in #crunk
         return True
 
     async def handle_action(self, bot, nick: str, channel: str, action: str) -> bool:
         # Block other plugins in #crunk but don't respond to actions
-        if channel.lower() == self.target_channel:
+        if channel.lower() == self.target_channel.lower():
             return True
         return False
 
@@ -117,3 +114,29 @@ class LilJonPlugin:
 
     async def handle_part(self, bot, nick: str, channel: str, reason: str):
         pass
+
+    async def _passive_quote_loop(self, bot):
+        try:
+            while True:
+                await asyncio.sleep(self.passive_interval_seconds)
+                if not self.enabled:
+                    continue
+                if not getattr(bot, "connected", False):
+                    continue
+                if self.target_channel not in getattr(bot, "channels", set()):
+                    continue
+                quote = random.choice(self.quotes)
+                await bot.privmsg(self.target_channel, quote)
+        except asyncio.CancelledError:
+            return
+        except Exception as e:
+            logging.error(f"LilJon passive quote loop crashed: {e}")
+
+    async def cleanup(self):
+        if self._passive_task:
+            self._passive_task.cancel()
+            try:
+                await self._passive_task
+            except asyncio.CancelledError:
+                pass
+            self._passive_task = None
