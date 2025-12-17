@@ -6,10 +6,14 @@ Integrates with OpenRouter API to provide intelligent responses
 import re
 import random
 import time
-import httpx
 import asyncio
 from typing import List, Dict, Any, Optional
 import logging
+
+try:
+    import httpx
+except ImportError:  # pragma: no cover
+    httpx = None
 
 class AIResponsePlugin:
     """AI Response Plugin that uses OpenRouter API"""
@@ -33,7 +37,7 @@ class AIResponsePlugin:
             "disabled_channels": [],  # Specific channels to disable
             "system_prompt": "You are a friendly IRC bot. Keep responses concise, conversational, and appropriate for chat rooms. Avoid being overly formal or verbose.",
             "trigger_patterns": [
-                r'(?i)^({botname}[,:]?)\s+(.+)$',  # Direct messages to bot
+                r'(?i)^@?({botname})[,:]?\s*(.+)$',  # Direct messages to bot (allow "@bot:" and no-space after punctuation)
                 r'(?i)\b({botname})\b.*\?',  # Questions containing bot name
                 r'(?i)what do you think\b.*',  # "What do you think" questions
                 r'(?i)your opinion\b.*',  # "Your opinion" questions
@@ -54,6 +58,11 @@ class AIResponsePlugin:
         
     def load_config(self, bot_config: Dict[str, Any]):
         """Load configuration from bot config"""
+        if httpx is None:
+            logging.warning("httpx is not installed; AI plugin will be disabled.")
+            self.enabled = False
+            return
+
         if 'ai_response' in bot_config:
             ai_config = bot_config['ai_response']
             
@@ -126,12 +135,10 @@ class AIResponsePlugin:
     
     def _extract_prompt(self, message: str, bot_names: List[str]) -> str:
         """Extract the actual prompt from the message"""
-        message_lower = message.lower()
-        
         # Try to find direct messages to bot
         for bot_name in bot_names:
-            # Pattern: "botname: message" or "botname, message" or "botname message"
-            pattern = rf'^(?:{re.escape(bot_name)}[,:]?\s*)(.+)$'
+            # Pattern: "botname: message" or "botname, message" or "@botname message"
+            pattern = rf'^(?:@?{re.escape(bot_name)}[,:]?\s*)(.+)$'
             match = re.search(pattern, message, re.IGNORECASE)
             if match:
                 return match.group(1).strip()
@@ -166,6 +173,9 @@ class AIResponsePlugin:
     
     async def _call_openrouter_api(self, prompt: str, context: str = "") -> str:
         """Call OpenRouter API to get AI response"""
+        if httpx is None:
+            return "My AI backend isn't available right now."
+
         if not self.http_client:
             self.http_client = httpx.AsyncClient()
         

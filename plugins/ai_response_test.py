@@ -30,7 +30,7 @@ class AIResponsePlugin:
             "enabled_channels": [],  # Empty list means all channels
             "disabled_channels": [],  # Specific channels to disable
             "trigger_patterns": [
-                r'(?i)^({botname}[,:]?)\s+(.+)$',  # Direct messages to bot
+                r'(?i)^@?({botname})[,:]?\s*(.+)$',  # Direct messages to bot (allow "@bot:" and no-space after punctuation)
                 r'(?i)\b({botname})\b.*\?',  # Questions containing bot name
                 r'(?i)what do you think\b.*',  # "What do you think" questions
                 r'(?i)your opinion\b.*',  # "Your opinion" questions
@@ -123,12 +123,10 @@ class AIResponsePlugin:
     
     def _extract_prompt(self, message: str, bot_names: List[str]) -> str:
         """Extract the actual prompt from the message"""
-        message_lower = message.lower()
-        
         # Try to find direct messages to bot
         for bot_name in bot_names:
-            # Pattern: "botname: message" or "botname, message" or "botname message"
-            pattern = rf'^(?:{re.escape(bot_name)}[,:]?\s*)(.+)$'
+            # Pattern: "botname: message" or "botname, message" or "@botname message"
+            pattern = rf'^(?:@?{re.escape(bot_name)}[,:]?\s*)(.+)$'
             match = re.search(pattern, message, re.IGNORECASE)
             if match:
                 return match.group(1).strip()
