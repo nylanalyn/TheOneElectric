@@ -1,0 +1,39 @@
+{
+    "server": "irc.libera.chat",
+    "port": 6697,
+    "ssl": true,
+    "nick": "PyMotionTest",
+    "aliases": ["pybot", "motion"],
+    "realname": "PyMotion AI Test Bot",
+    "channels": [
+        {"name": "#test", "key": null}
+    ],
+    "sasl": {
+        "enabled": false,
+        "username": "",
+        "password": ""
+    },
+    "modes": "+B",
+    "irc_log_file": "test_irc_traffic.log",
+    "log_level": "INFO",
+    "plugins": {
+        "enabled": ["ai_response"],
+        "disabled": []
+    },
+    "admins": [],
+    "personality": {
+        "chattiness": 0.3,
+        "friendliness": 0.8,
+        "randomness": 0.5
+    },
+    "ai_response": {
+        "openrouter_api_key": "test_key_placeholder",
+        "openrouter_api_url": "https://openrouter.ai/api/v1/chat/completions",
+        "model": "mistralai/mistral-7b-instruct:free",
+        "max_response_length": 150,
+        "response_probability": 1.0,  # Always respond for testing
+        "cooldown_seconds": 5,
+        "enabled_channels": [],
+        "disabled_channels": []
+    }
+}

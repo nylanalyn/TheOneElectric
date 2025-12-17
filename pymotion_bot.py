@@ -273,8 +273,18 @@ class PyMotion(IRCBot):
             "irc_log_file": "irc_traffic.log",  # Log all IRC traffic to file
             "log_level": "DEBUG",  # Set to DEBUG to see everything
             "plugins": {
-                "enabled": ["shutup", "admin", "greetings", "random_responses", "actions", "questions", "kill", "random_chatter", "cancel", "quotes", "projectile", "stealth", "decision", "makeme"],
+                "enabled": ["shutup", "admin", "greetings", "random_responses", "actions", "questions", "kill", "random_chatter", "cancel", "quotes", "projectile", "stealth", "decision", "makeme", "ai_response_test"],
                 "disabled": []
+            },
+            "ai_response": {
+                "openrouter_api_key": "",  # Get from https://openrouter.ai/keys
+                "openrouter_api_url": "https://openrouter.ai/api/v1/chat/completions",
+                "model": "mistralai/mistral-7b-instruct:free",
+                "max_response_length": 150,
+                "response_probability": 0.6,
+                "cooldown_seconds": 30,
+                "enabled_channels": [],  # Empty = all channels
+                "disabled_channels": []
             },
             "admins": [],  # Add your IRC nick here for admin commands
             "personality": {
@@ -369,6 +379,11 @@ class PyMotion(IRCBot):
                 for plugin_class in plugin_classes:
                     try:
                         plugin_instance = plugin_class()
+                        
+                        # Call load_config if it exists
+                        if hasattr(plugin_instance, 'load_config'):
+                            plugin_instance.load_config(self.config)
+                        
                         self.plugins.append(plugin_instance)
                         logging.info(f"Loaded plugin: {plugin_instance.name} (priority: {plugin_instance.priority})")
                     except Exception as e:
@@ -724,6 +739,14 @@ class PyMotion(IRCBot):
         except Exception as e:
             logging.error(f"Bot error: {e}")
         finally:
+            # Clean up plugins
+            for plugin in self.plugins:
+                if hasattr(plugin, 'cleanup'):
+                    try:
+                        await plugin.cleanup()
+                    except Exception as e:
+                        logging.error(f"Error cleaning up plugin {plugin.name}: {e}")
+            
             if self.writer:
                 self.writer.close()
                 await self.writer.wait_closed()

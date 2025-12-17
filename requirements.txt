@@ -4,6 +4,9 @@
 # For async file operations (used in the code but not strictly necessary)
 aiofiles>=23.0.0
 
+# For AI plugin HTTP requests
+httpx>=0.27.0
+
 # That's it! The bot uses only Python standard library otherwise.
 # 
 # Optional dependencies for enhanced functionality:
