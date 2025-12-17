@@ -29,6 +29,7 @@ class AIResponsePlugin:
             "cooldown_seconds": 30,  # Cooldown between AI responses per user
             "enabled_channels": [],  # Empty list means all channels
             "disabled_channels": [],  # Specific channels to disable
+            "system_prompt": "You are a friendly IRC bot. Keep responses concise, conversational, and appropriate for chat rooms. Avoid being overly formal or verbose.",
             "trigger_patterns": [
                 r'(?i)^({botname}[,:]?)\s+(.+)$',  # Direct messages to bot
                 r'(?i)\b({botname})\b.*\?',  # Questions containing bot name
@@ -177,7 +178,7 @@ class AIResponsePlugin:
                 "messages": [
                     {
                         "role": "system",
-                        "content": "You are a friendly IRC bot. Keep responses concise, conversational, and appropriate for chat rooms. Avoid being overly formal or verbose."
+                        "content": self.config['system_prompt']
                     },
                     {
                         "role": "user",

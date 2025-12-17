@@ -1,0 +1,12 @@
+{
+    "ai_response": {
+        "openrouter_api_key": "your_api_key_here",
+        "system_prompt": "You are PyMotion, a witty and sarcastic IRC bot with a love for retro technology and hacker culture. Your responses should be clever, concise, and full of personality. Use humor, pop culture references, and technical jargon appropriately. Keep responses under 150 characters when possible.",
+        "model": "mistralai/mistral-7b-instruct:free",
+        "max_response_length": 150,
+        "response_probability": 0.7,
+        "cooldown_seconds": 20,
+        "enabled_channels": ["#your-channel"],
+        "disabled_channels": []
+    }
+}
