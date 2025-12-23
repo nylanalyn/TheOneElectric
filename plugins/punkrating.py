@@ -14,31 +14,46 @@ import urllib.request
 from typing import Dict, Optional
 
 
-class Plugin:
+class PunkRatingPlugin:
     """Punk rating plugin using DeepSeek AI"""
     
     name = "punkrating"
     priority = 50  # Higher priority to catch commands early
     enabled = True
     
-    def __init__(self, bot):
-        self.bot = bot
-        self.config = bot.config.get('deepseek', {})
+    def __init__(self):
+        # Memory and cooldown management
+        self.memory: Dict[str, Dict[str, str]] = {}
+        self.cooldowns: Dict[str, float] = {}
+        
+        # These will be set by load_config
+        self.api_base = None
+        self.model = None
+        self.api_key_env = None
+        self.temperature = None
+        self.rate_prompt = None
+        self.suggestion_prompt = None
+        self.data_file = None
+        self.cooldown_seconds = None
+    
+    def load_config(self, bot_config):
+        """Load configuration from bot config"""
+        deepseek_config = bot_config.get('deepseek', {})
         
         # DeepSeek API configuration
-        self.api_base = self.config.get('api_base', 'https://api.deepseek.com/v1/chat/completions')
-        self.model = self.config.get('model', 'deepseek-chat')
-        self.api_key_env = self.config.get('api_key_env', 'DEEPSEEK_API_KEY')
-        self.temperature = self.config.get('temperature', 0.7)
+        self.api_base = deepseek_config.get('api_base', 'https://api.deepseek.com/v1/chat/completions')
+        self.model = deepseek_config.get('model', 'deepseek-chat')
+        self.api_key_env = deepseek_config.get('api_key_env', 'DEEPSEEK_API_KEY')
+        self.temperature = deepseek_config.get('temperature', 0.7)
         
         # Prompts
-        self.rate_prompt = self.config.get(
+        self.rate_prompt = deepseek_config.get(
             'prompt',
             "You are Henry Botlins, a jaded 80s punk rocker judging whether things are punk or sellout trash. "
             "Be blunt, be mean, be funny. Rate {thing} on the punk scale and explain why in 1-2 sentences max. "
             "Don't hedge, pick a side."
         )
-        self.suggestion_prompt = self.config.get(
+        self.suggestion_prompt = deepseek_config.get(
             'suggestion_prompt',
             "You are Henry Botlins, a jaded 80s punk rocker. Someone asked about {thing}. "
             "Suggest a similar alternative that would be 10/10 on the punk scale. "
@@ -46,10 +61,8 @@ class Plugin:
         )
         
         # Memory and cooldown management
-        self.data_file = self.config.get('data_file', 'punk_ratings.json')
-        self.cooldown_seconds = self.config.get('cooldown_seconds', 30)
-        self.memory: Dict[str, Dict[str, str]] = {}
-        self.cooldowns: Dict[str, float] = {}
+        self.data_file = deepseek_config.get('data_file', 'punk_ratings.json')
+        self.cooldown_seconds = deepseek_config.get('cooldown_seconds', 30)
         
         self._load_memory()
     
