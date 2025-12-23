@@ -173,16 +173,16 @@ class PunkRatingPlugin:
         parts = message.split(' ', 1)
         if len(parts) < 2 or not parts[1].strip():
             if is_rate:
-                await bot.send_message(channel, f"{nick}: rate what? give me a thing.")
+                await bot.privmsg(channel, f"{nick}: rate what? give me a thing.")
             else:
-                await bot.send_message(channel, f"{nick}: suggest what? give me a thing.")
+                await bot.privmsg(channel, f"{nick}: suggest what? give me a thing.")
             return True
         
         thing = parts[1].strip()
         
         # Check cooldown
         if self._check_cooldown(nick):
-            await bot.send_message(
+            await bot.privmsg(
                 channel,
                 f"{nick}: cool your jets. Try again in a bit."
             )
@@ -195,12 +195,12 @@ class PunkRatingPlugin:
         
         if existing:
             if existing.get('nick') == nick:
-                await bot.send_message(
+                await bot.privmsg(
                     channel,
                     f"{nick}: you already asked. Scroll up in your logs."
                 )
             else:
-                await bot.send_message(
+                await bot.privmsg(
                     channel,
                     f"{nick}: like I told {existing.get('nick')}, {existing.get('response')}"
                 )
@@ -213,7 +213,7 @@ class PunkRatingPlugin:
             else:
                 response = await self._suggest_alternative(thing)
         except Exception as e:
-            await bot.send_message(
+            await bot.privmsg(
                 channel,
                 f"{nick}: DeepSeek borked: {e}"
             )
@@ -229,7 +229,7 @@ class PunkRatingPlugin:
         self._save_memory()
         
         # Send response
-        await bot.send_message(channel, response)
+        await bot.privmsg(channel, response)
         return True
     
     async def handle_action(self, bot, nick, channel, action):
