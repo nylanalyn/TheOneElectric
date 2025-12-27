@@ -71,7 +71,13 @@ class LilJonPlugin:
             "DROP IT!",
             "LET'S GET IT!",
             "FIRE IT UP!"
-        ]
+            "It's a piece of cake to bake a pretty cake",
+            "You gotta do the cooking by the book",
+            "Never use a messy recipe",
+            "If you do the cooking by the book",
+            "Making food is just like science",
+            "With tools that blend and baste"
+                      ]
 
     async def start(self, bot):
         if self._passive_task and not self._passive_task.done():
