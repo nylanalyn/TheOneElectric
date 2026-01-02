@@ -701,9 +701,15 @@ class PyMotion(IRCBot):
         # Bot names (including aliases)
         bot_names = [self.config['nick'].lower()] + [alias.lower() for alias in self.config.get('aliases', [])]
         
+        message_lower = message.lower()
+        
+        # Special case: Allow "what's my cat's name?" pattern
+        if re.search(r"what'?s my cat'?s name", message_lower):
+            logging.debug(f"Message matches cat name exception, skipping username filter")
+            return False
+        
         # Don't filter if this looks like a command to the bot
         # Commands typically have bot name at the start
-        message_lower = message.lower()
         for bot_name in bot_names:
             if message_lower.startswith(bot_name) or message_lower.startswith(f"@{bot_name}"):
                 logging.debug(f"Message is a command to the bot, skipping username filter")

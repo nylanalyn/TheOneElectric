@@ -63,6 +63,30 @@ class AdminPlugin:
                 await bot.privmsg(channel, status_msg)
                 return True
             
+            # Plugins command
+            if re.search(rf'(?i)\b{re.escape(bot_name)}\b.*\bplugins\b', message):
+                if not is_admin:
+                    await bot.privmsg(channel, f"{nick}: Sorry, only admins can use that command!")
+                    return True
+                
+                # Group plugins by status
+                enabled_plugins = [(p.name, p.priority) for p in bot.plugins if p.enabled]
+                disabled_plugins = [p.name for p in bot.plugins if not p.enabled]
+                
+                # Sort enabled plugins by priority (highest first)
+                enabled_plugins.sort(key=lambda x: x[1], reverse=True)
+                
+                # Format the plugin list
+                enabled_str = ", ".join([f"{name} ({priority})" for name, priority in enabled_plugins])
+                
+                await bot.privmsg(channel, f"🔌 Enabled plugins [{len(enabled_plugins)}]: {enabled_str}")
+                
+                if disabled_plugins:
+                    disabled_str = ", ".join(disabled_plugins)
+                    await bot.privmsg(channel, f"⏸️  Disabled plugins [{len(disabled_plugins)}]: {disabled_str}")
+                
+                return True
+            
             # Help command for admins
             if re.search(rf'(?i)\b{re.escape(bot_name)}\b.*\badmin\s+help\b', message):
                 if not is_admin:
@@ -72,7 +96,8 @@ class AdminPlugin:
                 help_text = (
                     "Admin commands: "
                     "reload (reload config & plugins), "
-                    "status (show bot status)"
+                    "status (show bot status), "
+                    "plugins (list loaded plugins)"
                 )
                 await bot.privmsg(channel, help_text)
                 return True
