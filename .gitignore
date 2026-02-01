@@ -1,3 +1,4 @@
+Vagrantfile
 pymotion.json
 __pycache__
 irc_traffic.log
@@ -7,3 +8,5 @@ irc_traffic.log
 .direnv/
 result
 result-*
+
+.vagrant/
