@@ -802,18 +802,25 @@ class PyMotion(IRCBot):
         except Exception as e:
             logging.error(f"Bot error: {e}")
         finally:
-            # Clean up plugins
-            await self._cancel_background_tasks()
+            # Clean up plugins - wrap in try/except to preserve exit codes
+            try:
+                await self._cancel_background_tasks()
+            except Exception as e:
+                logging.error(f"Error cancelling background tasks: {e}")
+
             for plugin in self.plugins:
                 if hasattr(plugin, 'cleanup'):
                     try:
                         await plugin.cleanup()
                     except Exception as e:
                         logging.error(f"Error cleaning up plugin {plugin.name}: {e}")
-            
-            if self.writer:
-                self.writer.close()
-                await self.writer.wait_closed()
+
+            try:
+                if self.writer:
+                    self.writer.close()
+                    await self.writer.wait_closed()
+            except Exception as e:
+                logging.error(f"Error closing writer: {e}")
 
 async def main():
     """Entry point"""
