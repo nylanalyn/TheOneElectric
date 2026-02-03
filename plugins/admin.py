@@ -5,6 +5,7 @@ Administrative commands for managing the bot
 
 import re
 import logging
+import sys
 
 class AdminPlugin:
     """Handle admin commands like reload"""
@@ -92,16 +93,30 @@ class AdminPlugin:
                 if not is_admin:
                     await bot.privmsg(channel, f"{nick}: You're not an admin!")
                     return True
-                
+
                 help_text = (
                     "Admin commands: "
                     "reload (reload config & plugins), "
                     "status (show bot status), "
-                    "plugins (list loaded plugins)"
+                    "plugins (list loaded plugins), "
+                    "!kill (shutdown bot)"
                 )
                 await bot.privmsg(channel, help_text)
                 return True
-        
+
+        # !kill command - shutdown bot (outside bot name loop since it uses ! prefix)
+        if message.strip().lower() == '!kill':
+            if not is_admin:
+                await bot.privmsg(channel, f"{nick}: Sorry, only admins can use that command!")
+                return True
+
+            logging.info(f"Bot shutdown initiated by {nick}")
+            await bot.privmsg(channel, "Shutting down...")
+            await bot.send("QUIT :Shutdown requested by admin")
+
+            # Exit with code 42 to prevent systemd restart
+            sys.exit(42)
+
         return False
     
     async def handle_action(self, bot, nick: str, channel: str, action: str) -> bool:
