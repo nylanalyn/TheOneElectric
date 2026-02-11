@@ -3,6 +3,7 @@ Stealth Plugin for PyMotion
 Sneak attacks and stealth mechanics
 """
 
+import asyncio
 import random
 import re
 import time
@@ -138,7 +139,6 @@ class StealthPlugin:
             await bot.privmsg(channel, "*SNEAK ATTACK!* 🥷")
             
             # Small pause for effect
-            import asyncio
             await asyncio.sleep(0.5)
             
             return True  # Indicates this was a stealth attack

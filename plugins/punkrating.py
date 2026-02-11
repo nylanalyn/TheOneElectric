@@ -7,11 +7,14 @@ on the punk scale with Henry Botlins' jaded 80s punk rocker personality.
 
 import asyncio
 import json
+import logging
 import os
 import time
 import urllib.error
 import urllib.request
 from typing import Dict, Optional
+
+import aiofiles
 
 
 class PunkRatingPlugin:
@@ -76,11 +79,11 @@ class PunkRatingPlugin:
         except (json.JSONDecodeError, OSError):
             self.memory = {}
     
-    def _save_memory(self):
-        """Save ratings to JSON file"""
+    async def _save_memory(self):
+        """Save ratings to JSON file (async)."""
         tmp_path = self.data_file + '.tmp'
-        with open(tmp_path, 'w', encoding='utf-8') as f:
-            json.dump(self.memory, f, indent=2)
+        async with aiofiles.open(tmp_path, 'w', encoding='utf-8') as f:
+            await f.write(json.dumps(self.memory, indent=2))
         os.replace(tmp_path, self.data_file)
     
     def _normalize_thing(self, text: str) -> str:
@@ -213,9 +216,10 @@ class PunkRatingPlugin:
             else:
                 response = await self._suggest_alternative(thing)
         except Exception as e:
+            logging.error(f"DeepSeek error for {nick}: {e}")
             await bot.privmsg(
                 channel,
-                f"{nick}: DeepSeek borked: {e}"
+                f"{nick}: Something went wrong. Try again later."
             )
             return True
         
@@ -226,8 +230,8 @@ class PunkRatingPlugin:
             'nick': nick,
             'timestamp': time.time()
         }
-        self._save_memory()
-        
+        await self._save_memory()
+
         # Send response
         await bot.privmsg(channel, response)
         return True

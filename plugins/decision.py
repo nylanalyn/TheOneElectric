@@ -3,6 +3,7 @@ Decision Plugin for PyMotion
 Helps make important life decisions through highly scientific coin flips and dice rolls
 """
 
+import asyncio
 import random
 import re
 
@@ -91,13 +92,11 @@ class DecisionPlugin:
         if random.random() < 0.01:
             result = random.choice(self.coin_disasters)
             await bot.action(channel, f"flips a coin for {nick}...")
-            import asyncio
             await asyncio.sleep(1)
             await bot.privmsg(channel, result)
         else:
             result = random.choice(self.coin_normal)
             await bot.action(channel, f"flips a coin for {nick}...")
-            import asyncio
             await asyncio.sleep(0.8)
             await bot.privmsg(channel, result)
     

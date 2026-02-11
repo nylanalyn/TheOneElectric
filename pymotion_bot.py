@@ -32,6 +32,13 @@ class IRCBot:
         self.connected = False
         self.registered = False
         self.sasl_in_progress = False
+        self.exit_code = 0
+
+        # Token-bucket rate limiter for outgoing messages
+        self._send_tokens = 3.0       # current tokens (messages we can send now)
+        self._send_max_tokens = 5.0   # burst capacity
+        self._send_rate = 2.0         # tokens refilled per second
+        self._send_last_refill = time.time()
         
     async def connect(self):
         """Connect to IRC server with SSL support"""
@@ -68,25 +75,58 @@ class IRCBot:
             logging.error(f"Failed to connect: {e}")
             raise
     
+    @staticmethod
+    def _redact_sensitive(message: str) -> str:
+        """Redact credentials from a log line."""
+        if message.startswith("AUTHENTICATE ") and message != "AUTHENTICATE PLAIN":
+            return "AUTHENTICATE [REDACTED]"
+        if "NickServ" in message and "IDENTIFY" in message:
+            return "PRIVMSG NickServ :IDENTIFY [REDACTED]"
+        return message
+
     async def send(self, message: str):
-        """Send raw IRC message"""
+        """Send raw IRC message with token-bucket rate limiting."""
         if self.writer:
+            # Refill tokens based on elapsed time
+            now = time.time()
+            elapsed = now - self._send_last_refill
+            self._send_tokens = min(self._send_max_tokens,
+                                    self._send_tokens + elapsed * self._send_rate)
+            self._send_last_refill = now
+
+            # Wait if no tokens available
+            if self._send_tokens < 1.0:
+                wait = (1.0 - self._send_tokens) / self._send_rate
+                await asyncio.sleep(wait)
+                self._send_tokens = 1.0
+                self._send_last_refill = time.time()
+
+            self._send_tokens -= 1.0
+
             self.writer.write(f"{message}\r\n".encode())
             await self.writer.drain()
-            logging.debug(f"SENT: {message}")
-            
+            log_message = self._redact_sensitive(message)
+            logging.debug(f"SENT: {log_message}")
+
             # Also log to file if configured
             if hasattr(self, 'irc_log_file') and self.irc_log_file:
                 timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                with open(self.irc_log_file, 'a', encoding='utf-8') as f:
-                    f.write(f"[{timestamp}] SENT: {message}\n")
+                async with aiofiles.open(self.irc_log_file, 'a') as f:
+                    await f.write(f"[{timestamp}] SENT: {log_message}\n")
     
     async def privmsg(self, target: str, message: str):
-        """Send PRIVMSG"""
+        """Send PRIVMSG, truncating if it would exceed IRC line limits."""
+        # IRC line limit is 512 bytes including CRLF; leave room for protocol overhead
+        max_msg_len = 400
+        if len(message.encode('utf-8')) > max_msg_len:
+            message = message[:max_msg_len].rsplit(' ', 1)[0] + "..."
         await self.send(f"PRIVMSG {target} :{message}")
-    
+
     async def action(self, target: str, message: str):
-        """Send ACTION (/me)"""
+        """Send ACTION (/me), truncating if it would exceed IRC line limits."""
+        max_msg_len = 390  # slightly less to account for \001ACTION\001 wrapper
+        if len(message.encode('utf-8')) > max_msg_len:
+            message = message[:max_msg_len].rsplit(' ', 1)[0] + "..."
         await self.send(f"PRIVMSG {target} :\001ACTION {message}\001")
     
     async def join_channel(self, channel: str, key: str = None):
@@ -144,17 +184,19 @@ class IRCBot:
     
     async def handle_message(self, line: str):
         """Override this to handle IRC messages"""
-        logging.debug(f"RECV: {line}")
-        
+        log_line = self._redact_sensitive(line)
+        logging.debug(f"RECV: {log_line}")
+
         # Also log to file if configured
         if hasattr(self, 'irc_log_file') and self.irc_log_file:
             timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            with open(self.irc_log_file, 'a', encoding='utf-8') as f:
-                f.write(f"[{timestamp}] RECV: {line}\n")
-        
-        # Handle PING
+            async with aiofiles.open(self.irc_log_file, 'a') as f:
+                await f.write(f"[{timestamp}] RECV: {log_line}\n")
+
+        # Handle PING — support both "PING :token" and "PING token"
         if line.startswith('PING'):
-            await self.send(f"PONG {line.split(':', 1)[1]}")
+            token = line.split(':', 1)[1] if ':' in line else line.split(' ', 1)[1]
+            await self.send(f"PONG :{token}")
             return
             
         # Parse IRC message
@@ -187,6 +229,9 @@ class UserState:
     greeted_today: bool = False
     last_interaction: str = ""
     mood_modifier: float = 0.0
+    kill_count: int = 0
+    shutup_count: int = 0
+    last_shutup_time: float = 0.0
 
 @dataclass
 class ChannelState:
@@ -225,8 +270,9 @@ class PyMotion(IRCBot):
     """Main bot class"""
     
     def __init__(self, config_file: str = "pymotion.json"):
-        # Load configuration
-        self.config_file = Path(config_file)
+        # Load configuration — resolve relative to script location
+        self._base_dir = Path(__file__).resolve().parent
+        self.config_file = self._base_dir / config_file
         self.config = self.load_config()
         
         super().__init__(self.config)
@@ -236,6 +282,7 @@ class PyMotion(IRCBot):
         self.plugins: List[Plugin] = []
         self.start_time = time.time()
         self.background_tasks: set[asyncio.Task] = set()
+        self.opinions: Dict[str, Dict] = {}  # {"topic": {"sentiment": float, "mentions": int, "last_mentioned": float, "formed_at": float}}
         
         # Set up logging first
         log_level = getattr(logging, self.config.get('log_level', 'INFO').upper())
@@ -306,6 +353,17 @@ class PyMotion(IRCBot):
         self.load_plugins()
         await self.start_plugins()
     
+    @staticmethod
+    def _deep_merge(base: dict, override: dict) -> dict:
+        """Recursively merge override into base, preserving nested keys."""
+        merged = base.copy()
+        for key, value in override.items():
+            if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+                merged[key] = PyMotion._deep_merge(merged[key], value)
+            else:
+                merged[key] = value
+        return merged
+
     def load_config(self) -> Dict[str, Any]:
         """Load configuration from JSON file"""
         default_config = {
@@ -328,11 +386,11 @@ class PyMotion(IRCBot):
             "irc_log_file": "irc_traffic.log",  # Log all IRC traffic to file
             "log_level": "DEBUG",  # Set to DEBUG to see everything
             "plugins": {
-                "enabled": ["shutup", "admin", "greetings", "random_responses", "actions", "questions", "kill", "random_chatter", "cancel", "quotes", "projectile", "stealth", "decision", "makeme", "liljon", "ai_response_test"],
+                "enabled": ["shutup", "admin", "greetings", "random_responses", "actions", "questions", "kill", "random_chatter", "cancel", "quotes", "projectile", "stealth", "decision", "makeme", "liljon", "ai_response"],
                 "disabled": []
             },
             "ai_response": {
-                "openrouter_api_key": "",  # Get from https://openrouter.ai/keys
+                "openrouter_api_key_env": "OPENROUTER_API_KEY",  # env var name for API key
                 "openrouter_api_url": "https://openrouter.ai/api/v1/chat/completions",
                 "model": "mistralai/mistral-7b-instruct:free",
                 "max_response_length": 150,
@@ -353,7 +411,7 @@ class PyMotion(IRCBot):
             try:
                 with open(self.config_file, 'r') as f:
                     config = json.load(f)
-                    default_config.update(config)
+                    default_config = self._deep_merge(default_config, config)
             except Exception as e:
                 logging.error(f"Error loading config: {e}")
         else:
@@ -367,7 +425,7 @@ class PyMotion(IRCBot):
     def load_plugins(self):
         """Load plugins from plugins directory"""
         self.plugins = []
-        plugins_dir = Path("plugins")
+        plugins_dir = self._base_dir / "plugins"
         
         # Create plugins directory if it doesn't exist
         if not plugins_dir.exists():
@@ -400,6 +458,10 @@ class PyMotion(IRCBot):
                 continue
             
             try:
+                # Clear stale module entry before reimporting (hot-reload safe)
+                if plugin_name in sys.modules:
+                    del sys.modules[plugin_name]
+
                 # Import the plugin module
                 spec = importlib.util.spec_from_file_location(plugin_name, plugin_file)
                 module = importlib.util.module_from_spec(spec)
@@ -462,7 +524,7 @@ class PyMotion(IRCBot):
         """Reload all plugins - useful for development"""
         logging.info("Reloading plugins...")
         # Clear module cache for plugin modules
-        plugins_dir = Path("plugins")
+        plugins_dir = self._base_dir / "plugins"
         for plugin_file in plugins_dir.glob("*.py"):
             module_name = plugin_file.stem
             if module_name in sys.modules:
@@ -472,6 +534,76 @@ class PyMotion(IRCBot):
         self.load_plugins()
         logging.info("Plugin reload complete")
     
+    def _state_file(self) -> Path:
+        return self._base_dir / "bot_state.json"
+
+    def save_state(self):
+        """Persist user/channel state to disk."""
+        data: Dict[str, Any] = {}
+        for ch_name, ch_state in self.channels_state.items():
+            users = {}
+            for nick, u in ch_state.users.items():
+                users[nick] = {
+                    "friendship": u.friendship,
+                    "last_seen": u.last_seen,
+                    "greeted_today": u.greeted_today,
+                    "mood_modifier": u.mood_modifier,
+                    "kill_count": u.kill_count,
+                    "shutup_count": u.shutup_count,
+                    "last_shutup_time": u.last_shutup_time,
+                }
+            data[ch_name] = {
+                "mood": ch_state.mood,
+                "topic": ch_state.topic,
+                "users": users,
+            }
+        data["_opinions"] = self.opinions
+        tmp = str(self._state_file()) + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        import os
+        os.replace(tmp, self._state_file())
+        logging.debug("Bot state saved to disk")
+
+    def load_state(self):
+        """Load persisted user/channel state from disk."""
+        path = self._state_file()
+        if not path.exists():
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            # Load opinions
+            if "_opinions" in data:
+                self.opinions = data.pop("_opinions")
+            for ch_name, ch_data in data.items():
+                if not isinstance(ch_data, dict):
+                    continue
+                ch_state = self.get_channel_state(ch_name)
+                ch_state.mood = ch_data.get("mood", 0.5)
+                ch_state.topic = ch_data.get("topic", "")
+                for nick, u_data in ch_data.get("users", {}).items():
+                    u_state = self.get_user_state(ch_name, nick)
+                    u_state.friendship = u_data.get("friendship", 0)
+                    u_state.last_seen = u_data.get("last_seen", time.time())
+                    u_state.greeted_today = u_data.get("greeted_today", False)
+                    u_state.mood_modifier = u_data.get("mood_modifier", 0.0)
+                    u_state.kill_count = u_data.get("kill_count", 0)
+                    u_state.shutup_count = u_data.get("shutup_count", 0)
+                    u_state.last_shutup_time = u_data.get("last_shutup_time", 0.0)
+            logging.info(f"Loaded bot state from {path}")
+        except Exception as e:
+            logging.error(f"Error loading bot state: {e}")
+
+    async def _periodic_state_save(self):
+        """Background task that saves state every 5 minutes."""
+        try:
+            while True:
+                await asyncio.sleep(300)
+                self.save_state()
+        except asyncio.CancelledError:
+            self.save_state()  # one final save on shutdown
+
     def get_channel_state(self, channel: str) -> ChannelState:
         """Get or create channel state"""
         if channel not in self.channels_state:
@@ -485,6 +617,114 @@ class PyMotion(IRCBot):
             channel_state.users[nick] = UserState(nick=nick)
         return channel_state.users[nick]
     
+    # Stopwords for topic tracking
+    _STOPWORDS = frozenset({
+        "this", "that", "with", "from", "have", "been", "were", "they",
+        "their", "them", "will", "would", "could", "should", "about",
+        "what", "when", "where", "which", "there", "these", "those",
+        "then", "than", "other", "into", "over", "just", "also", "some",
+        "more", "very", "only", "even", "back", "after", "before",
+        "being", "does", "doing", "each", "here", "most", "much",
+        "your", "like", "make", "know", "think", "want", "look",
+        "time", "well", "come", "made", "find", "said", "http",
+        "https", "www", "really", "going", "thing", "things", "gonna",
+        "yeah", "okay", "right", "sure", "maybe", "still", "never",
+    })
+
+    def get_friendship_tier(self, channel: str, nick: str) -> str:
+        """Get friendship tier label for a user."""
+        user = self.get_user_state(channel, nick)
+        f = user.friendship
+        if f <= -10:
+            return "hostile"
+        elif f <= -1:
+            return "cold"
+        elif f <= 4:
+            return "neutral"
+        elif f <= 14:
+            return "friendly"
+        else:
+            return "bestie"
+
+    def get_time_personality(self) -> dict:
+        """Return personality modifiers based on time of day and day of week."""
+        now = datetime.now()
+        hour = now.hour
+        weekday = now.weekday()  # 0=Monday, 6=Sunday
+
+        energy = 1.0
+        grumpiness = 0.0
+        snark = 0.0
+        flavor = ""
+
+        if 1 <= hour <= 5:
+            energy = 0.5
+            grumpiness = 0.3
+            snark = 0.2
+            flavor = "*yawns aggressively*"
+        elif 6 <= hour <= 8:
+            energy = 0.7
+            grumpiness = 0.1
+            snark = 0.1
+            flavor = "*hasn't had coffee yet*"
+        elif 10 <= hour <= 16:
+            energy = 1.2
+            grumpiness = 0.0
+            flavor = ""
+        elif weekday == 4 and hour >= 17:  # Friday evening
+            energy = 1.5
+            grumpiness = 0.0
+            snark = 0.1
+            flavor = "It's FRIDAY!"
+
+        # Weekends
+        if weekday >= 5:
+            energy = max(energy, 1.1)
+            grumpiness = max(grumpiness - 0.1, 0.0)
+            if not flavor:
+                flavor = ""
+
+        return {
+            "energy": energy,
+            "grumpiness": grumpiness,
+            "snark": snark,
+            "flavor": flavor,
+        }
+
+    def track_topic(self, channel: str, nick: str, message: str):
+        """Extract notable words from a message and form opinions over time."""
+        bot_names = {self.config['nick'].lower()} | {a.lower() for a in self.config.get('aliases', [])}
+        channel_state = self.get_channel_state(channel)
+        nicks_lower = {n.lower() for n in channel_state.users}
+        nicks_lower.add(nick.lower())
+
+        words = re.findall(r'[a-zA-Z]{4,}', message.lower())
+        now = time.time()
+        for word in words:
+            if word in self._STOPWORDS or word in bot_names or word in nicks_lower:
+                continue
+            if word not in self.opinions:
+                self.opinions[word] = {
+                    "sentiment": 0.0,
+                    "mentions": 0,
+                    "last_mentioned": now,
+                    "formed_at": 0.0,
+                }
+            entry = self.opinions[word]
+            entry["mentions"] += 1
+            entry["last_mentioned"] = now
+            # Form opinion after 8 mentions if not already formed
+            if entry["mentions"] >= 8 and entry["formed_at"] == 0.0:
+                entry["sentiment"] = round(random.uniform(-0.8, 0.8), 2)
+                entry["formed_at"] = now
+
+        # Cap at 200 entries, prune least-recent
+        if len(self.opinions) > 200:
+            sorted_topics = sorted(self.opinions.items(), key=lambda x: x[1]["last_mentioned"])
+            to_remove = len(self.opinions) - 200
+            for topic, _ in sorted_topics[:to_remove]:
+                del self.opinions[topic]
+
     async def on_message(self, source: str, command: str, params: List[str]):
         """Handle IRC messages"""
         if command == "CAP":
@@ -520,6 +760,13 @@ class PyMotion(IRCBot):
             await self.send("CAP END")
             self.sasl_in_progress = False
         
+        elif command == "433":  # ERR_NICKNAMEINUSE
+            current_nick = self.config['nick']
+            new_nick = current_nick + "_"
+            logging.warning(f"Nick '{current_nick}' is in use, trying '{new_nick}'")
+            self.config['nick'] = new_nick
+            await self.send(f"NICK {new_nick}")
+
         elif command == "001":  # Welcome message
             logging.info("Received 001 welcome message - IRC registration complete")
             self.registered = True
@@ -555,7 +802,11 @@ class PyMotion(IRCBot):
                         await self.join_channel(channel, key)
             
             await self.start_plugins()
-        
+            self.load_state()
+            self.create_background_task(
+                self._periodic_state_save(), name="periodic_state_save"
+            )
+
         elif command == "PRIVMSG":
             if len(params) >= 2:
                 target = params[0]
@@ -651,10 +902,20 @@ class PyMotion(IRCBot):
         
         # Update user state
         user_state = self.get_user_state(channel, nick)
+        old_last_seen = user_state.last_seen
         user_state.last_seen = now
-        
+
+        # Friendship decay: drift toward 0 by 1 per day of absence, cap at -3 per return
+        days_away = (now - old_last_seen) / 86400.0
+        if days_away >= 1.0 and user_state.friendship != 0:
+            decay = min(int(days_away), 3)
+            if user_state.friendship > 0:
+                user_state.friendship = max(0, user_state.friendship - decay)
+            elif user_state.friendship < 0:
+                user_state.friendship = min(0, user_state.friendship + decay)
+
         # Reset daily greeting flag if it's a new day
-        if datetime.now().date() != datetime.fromtimestamp(user_state.last_seen).date():
+        if datetime.now().date() != datetime.fromtimestamp(old_last_seen).date():
             user_state.greeted_today = False
         
         logging.info(f"[{channel}] <{nick}> {message}")
@@ -662,8 +923,8 @@ class PyMotion(IRCBot):
         # Log to IRC file as well
         if hasattr(self, 'irc_log_file') and self.irc_log_file:
             timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            with open(self.irc_log_file, 'a', encoding='utf-8') as f:
-                f.write(f"[{timestamp}] [{channel}] <{nick}> {message}\n")
+            async with aiofiles.open(self.irc_log_file, 'a') as f:
+                await f.write(f"[{timestamp}] [{channel}] <{nick}> {message}\n")
         
         # Check if message contains other usernames (indicating they're talking ABOUT the bot, not TO it)
         contains_others = self.contains_other_usernames(channel, nick, message)
@@ -693,7 +954,10 @@ class PyMotion(IRCBot):
         
         # Log summary of plugin attempts
         logging.debug(f"[{channel}] Plugin results: {', '.join(plugin_results)}")
-        
+
+        # Track topics for opinion formation
+        self.track_topic(channel, nick, message)
+
         channel_state.last_activity = now
     
     def contains_other_usernames(self, channel: str, speaker: str, message: str) -> bool:
@@ -769,63 +1033,110 @@ class PyMotion(IRCBot):
         
         logging.info(f"[{channel}] {nick} joined")
         
-        # Process through plugins
+        # Process through plugins (stop chain if a plugin returns True)
         for plugin in self.plugins:
             if plugin.enabled:
                 try:
-                    await plugin.handle_join(self, nick, channel)
+                    handled = await plugin.handle_join(self, nick, channel)
+                    if handled:
+                        break
                 except Exception as e:
                     logging.error(f"Error in plugin {plugin.name}: {e}")
-    
+
     async def handle_part(self, nick: str, channel: str, reason: str):
         """Handle user parts"""
         if nick == self.config['nick']:
             return
-        
+
         logging.info(f"[{channel}] {nick} left ({reason})")
-        
-        # Process through plugins
+
+        # Process through plugins (stop chain if a plugin returns True)
         for plugin in self.plugins:
             if plugin.enabled:
                 try:
-                    await plugin.handle_part(self, nick, channel, reason)
+                    handled = await plugin.handle_part(self, nick, channel, reason)
+                    if handled:
+                        break
                 except Exception as e:
                     logging.error(f"Error in plugin {plugin.name}: {e}")
     
-    async def run(self):
-        """Main bot loop"""
+    async def _cleanup(self):
+        """Run all cleanup tasks (background tasks, plugins, writer)."""
         try:
-            await self.connect()
-            await self.listen()
-        except KeyboardInterrupt:
-            logging.info("Bot stopped by user")
+            self.save_state()
         except Exception as e:
-            logging.error(f"Bot error: {e}")
-        finally:
-            # Clean up plugins - wrap in try/except to preserve exit codes
-            try:
-                await self._cancel_background_tasks()
-            except Exception as e:
-                logging.error(f"Error cancelling background tasks: {e}")
+            logging.error(f"Error saving state: {e}")
 
-            for plugin in self.plugins:
-                if hasattr(plugin, 'cleanup'):
-                    try:
-                        await plugin.cleanup()
-                    except Exception as e:
-                        logging.error(f"Error cleaning up plugin {plugin.name}: {e}")
+        try:
+            await self._cancel_background_tasks()
+        except Exception as e:
+            logging.error(f"Error cancelling background tasks: {e}")
 
+        for plugin in self.plugins:
+            if hasattr(plugin, 'cleanup'):
+                try:
+                    await plugin.cleanup()
+                except Exception as e:
+                    logging.error(f"Error cleaning up plugin {plugin.name}: {e}")
+
+        try:
+            if self.writer:
+                self.writer.close()
+                await self.writer.wait_closed()
+        except Exception as e:
+            logging.error(f"Error closing writer: {e}")
+
+    async def run(self):
+        """Main bot loop with reconnection and exponential backoff."""
+        backoff = 1
+        max_backoff = 300  # 5 minutes max
+
+        while True:
             try:
-                if self.writer:
-                    self.writer.close()
-                    await self.writer.wait_closed()
+                await self.connect()
+                backoff = 1  # reset on successful connection
+                await self.listen()
+            except KeyboardInterrupt:
+                logging.info("Bot stopped by user")
+                break
             except Exception as e:
-                logging.error(f"Error closing writer: {e}")
+                logging.error(f"Bot error: {e}")
+
+            await self._cleanup()
+
+            # If a graceful shutdown was requested, exit now
+            if self.exit_code:
+                sys.exit(self.exit_code)
+
+            # If connected was explicitly set to False (e.g. admin shutdown), exit
+            if not self.connected:
+                break
+
+            logging.info(f"Reconnecting in {backoff}s...")
+            await asyncio.sleep(backoff)
+            backoff = min(backoff * 2, max_backoff)
+
+        await self._cleanup()
 
 async def main():
     """Entry point"""
+    import signal
+
     bot = PyMotion()
+
+    # Handle SIGTERM for clean systemd shutdown
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(sig, lambda: _handle_signal(bot))
+
     await bot.run()
+
+
+def _handle_signal(bot: PyMotion):
+    """Signal handler that triggers graceful shutdown."""
+    logging.info("Received shutdown signal")
+    bot.connected = False
+
 
 if __name__ == "__main__":
     asyncio.run(main())

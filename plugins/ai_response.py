@@ -3,6 +3,7 @@ AI Response Plugin for PyMotion
 Integrates with OpenRouter API to provide intelligent responses
 """
 
+import os
 import re
 import random
 import time
@@ -25,7 +26,7 @@ class AIResponsePlugin:
         
         # Configuration defaults
         self.config = {
-            "openrouter_api_key": None,
+            "openrouter_api_key_env": "OPENROUTER_API_KEY",  # env var name for API key
             "openrouter_api_url": "https://openrouter.ai/api/v1/chat/completions",
             "model": "mistralai/mistral-7b-instruct:free",  # Free model
             "max_response_length": 150,  # IRC character limit
@@ -73,11 +74,14 @@ class AIResponsePlugin:
                 else:
                     logging.warning(f"Unknown AI config key: {key}")
         
-        # Validate required configuration
-        if not self.config['openrouter_api_key']:
-            logging.warning("OpenRouter API key not configured. AI plugin will be disabled.")
+        # Read API key from environment variable
+        api_key_env = self.config['openrouter_api_key_env']
+        api_key = os.environ.get(api_key_env, '')
+        if not api_key:
+            logging.warning(f"OpenRouter API key not found in env var {api_key_env}. AI plugin will be disabled.")
             self.enabled = False
         else:
+            self.config['_api_key'] = api_key
             logging.info("AI Response plugin configured and enabled")
             logging.debug(f"AI config: model={self.config['model']}, max_length={self.config['max_response_length']}")
     
@@ -184,7 +188,7 @@ class AIResponsePlugin:
             full_prompt = f"{context}\n\nUser: {prompt}"
             
             headers = {
-                "Authorization": f"Bearer {self.config['openrouter_api_key']}",
+                "Authorization": f"Bearer {self.config['_api_key']}",
                 "Content-Type": "application/json"
             }
             

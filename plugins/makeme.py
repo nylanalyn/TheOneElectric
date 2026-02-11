@@ -1,6 +1,7 @@
 """
 Make Me Plugin for PyMotion
 Craft things or transform people - ambiguous on purpose!
+Friendship-aware: refusal chance scales with relationship tier
 """
 
 import random
@@ -9,12 +10,12 @@ import asyncio
 
 class MakeMePlugin:
     """Handle 'make me a thing' commands with delightful ambiguity"""
-    
+
     def __init__(self):
         self.name = "makeme"
         self.priority = 60
         self.enabled = True
-        
+
         # Crafting responses (make/create an item)
         self.crafting_actions = [
             "carefully crafts {user} a fine {thing}",
@@ -28,7 +29,7 @@ class MakeMePlugin:
             "hastily slaps together {user} a mediocre {thing}",
             "summons from the abyss {user}'s very own {thing}"
         ]
-        
+
         # Transformation responses (turn someone into something)
         self.transformation_spells = [
             "Blinga blonga! You're a {thing}",
@@ -42,8 +43,8 @@ class MakeMePlugin:
             "By the power of random transformation, become a {thing}!",
             "*waves wand dramatically* Ta-da! One {thing}, as requested"
         ]
-        
-        # Refusal responses (5% chance)
+
+        # Refusal responses
         self.refusals = [
             "No.",
             "I don't think so.",
@@ -66,7 +67,16 @@ class MakeMePlugin:
             "My mom said I'm not allowed to.",
             "The spirits say no."
         ]
-        
+
+        # Grumpy refusals (used during grumpy hours)
+        self.grumpy_refusals = [
+            "*yawns* ...no.",
+            "It's too early for this. Ask later.",
+            "*grumbles* Do I LOOK like I'm in the mood?",
+            "Come back when I've had coffee.",
+            "*stares blearily* ...what? No.",
+        ]
+
         # Misinterpretation responses (3% chance)
         self.misinterpretations = [
             "*makes you into an actual May* ...wait, that's not right",
@@ -80,11 +90,21 @@ class MakeMePlugin:
             "*orders a {thing} from Amazon* ETA: 2-3 business days",
             "Make you? I barely know you!"
         ]
-    
+
+    def _get_refusal_chance(self, tier: str) -> float:
+        """Get refusal chance based on friendship tier."""
+        return {
+            "bestie": 0.01,
+            "friendly": 0.03,
+            "neutral": 0.05,
+            "cold": 0.10,
+            "hostile": 0.20,
+        }.get(tier, 0.05)
+
     async def handle_message(self, bot, nick: str, channel: str, message: str) -> bool:
         """Handle make me commands"""
         bot_names = [bot.config['nick'].lower()] + [alias.lower() for alias in bot.config.get('aliases', [])]
-        
+
         for bot_name in bot_names:
             # Match "give X to Y" or "give Y an X"
             give_match = re.search(rf'(?i)\b{re.escape(bot_name)}\b.*\bgive\s+(?:(\w+)\s+)?(?:a|an)?\s*(.+?)\s+to\s+(\w+)', message)
@@ -106,66 +126,77 @@ class MakeMePlugin:
                     # "give a cookie to bob" format - group 2 is thing, group 3 is recipient
                     thing = give_match.group(2).strip().rstrip('!?.,')
                     recipient = give_match.group(3)
-                
+
                 await self.give_thing(bot, channel, nick, recipient, thing)
                 return True
-            
+
             # Match "make me a/an X" or just "make me X"
             make_match = re.search(rf'(?i)\b{re.escape(bot_name)}\b.*\bmake\s+me\s+(?:a|an)?\s*(.+)', message)
             if make_match:
                 thing = make_match.group(1).strip()
-                
+
                 # Don't process empty requests
                 if not thing:
                     await bot.privmsg(channel, f"{nick}: Make you... what? You have to tell me what!")
                     return True
-                
+
                 # Remove trailing punctuation
                 thing = thing.rstrip('!?.,')
-                
+
                 await self.make_thing(bot, channel, nick, thing)
                 return True
-            
+
             # Match "make [user] a/an X" - make something for someone else
             make_other_match = re.search(rf'(?i)\b{re.escape(bot_name)}\b.*\bmake\s+(\w+)\s+(?:a|an)?\s*(.+)', message)
             if make_other_match:
                 target = make_other_match.group(1).strip()
                 thing = make_other_match.group(2).strip().rstrip('!?.,')
-                
+
                 # Don't process empty requests
                 if not thing:
                     await bot.privmsg(channel, f"{nick}: Make them... what?")
                     return True
-                
+
                 await self.make_thing(bot, channel, target, thing)
                 return True
-        
+
         return False
-    
+
     async def make_thing(self, bot, channel: str, nick: str, thing: str):
         """Process the make request with various outcomes"""
-        
-        # 5% chance of outright refusal
-        if random.random() < 0.05:
-            refusal = random.choice(self.refusals)
+        tier = bot.get_friendship_tier(channel, nick)
+        personality = bot.get_time_personality()
+        refusal_chance = self._get_refusal_chance(tier)
+
+        # Friendship: +1 for asking bot to make something
+        user_state = bot.get_user_state(channel, nick)
+        user_state.friendship += 1
+
+        # Refusal check (friendship-scaled)
+        if random.random() < refusal_chance:
+            # Use grumpy refusals during grumpy hours
+            if personality["grumpiness"] > 0.2 and random.random() < 0.5:
+                refusal = random.choice(self.grumpy_refusals)
+            else:
+                refusal = random.choice(self.refusals)
             await bot.privmsg(channel, f"{nick}: {refusal}")
             return
-        
+
         # 3% chance of hilarious misinterpretation
         if random.random() < 0.03:
             misinterpretation = random.choice(self.misinterpretations).format(thing=thing)
             await bot.action(channel, misinterpretation)
             return
-        
+
         # Choose between crafting (60%) and transformation (40%)
         if random.random() < 0.6:
             # Crafting path
             await bot.privmsg(channel, "OK!")
             await asyncio.sleep(0.5)
-            
+
             action = random.choice(self.crafting_actions).format(user=nick, thing=thing)
             await bot.action(channel, action)
-            
+
             # Occasional quality commentary (20% chance)
             if random.random() < 0.2:
                 comments = [
@@ -182,15 +213,15 @@ class MakeMePlugin:
                 ]
                 await asyncio.sleep(0.8)
                 await bot.privmsg(channel, random.choice(comments))
-        
+
         else:
             # Transformation path
             spell = random.choice(self.transformation_spells).format(thing=thing)
-            
+
             await bot.action(channel, "waves wand")
             await asyncio.sleep(1)
             await bot.privmsg(channel, spell)
-            
+
             # Occasional transformation side-effects (15% chance)
             if random.random() < 0.15:
                 side_effects = [
@@ -207,10 +238,10 @@ class MakeMePlugin:
                 ]
                 await asyncio.sleep(1)
                 await bot.privmsg(channel, random.choice(side_effects))
-    
+
     async def give_thing(self, bot, channel: str, giver: str, recipient: str, thing: str):
         """Give something to someone with occasional chaos"""
-        
+
         # Check if trying to give to self
         if recipient.lower() == giver.lower():
             snarky_responses = [
@@ -224,7 +255,7 @@ class MakeMePlugin:
             ]
             await bot.privmsg(channel, random.choice(snarky_responses))
             return
-        
+
         # Check if trying to give to the bot
         bot_names = [bot.config['nick'].lower()] + [alias.lower() for alias in bot.config.get('aliases', [])]
         if recipient.lower() in bot_names:
@@ -240,7 +271,7 @@ class MakeMePlugin:
             ]
             await bot.privmsg(channel, random.choice(bot_responses))
             return
-        
+
         # 7% chance of chaos/mishaps
         if random.random() < 0.07:
             mishaps = [
@@ -258,9 +289,11 @@ class MakeMePlugin:
             mishap = random.choice(mishaps).format(recipient=recipient, thing=thing)
             await bot.action(channel, mishap)
             return
-        
-        # 5% chance of refusal
-        if random.random() < 0.05:
+
+        # Refusal based on friendship
+        tier = bot.get_friendship_tier(channel, giver)
+        refusal_chance = self._get_refusal_chance(tier)
+        if random.random() < refusal_chance:
             refusals = [
                 f"{giver}: Do it yourself, I'm busy.",
                 f"{giver}: That sounds like a 'you' problem.",
@@ -274,8 +307,8 @@ class MakeMePlugin:
             ]
             await bot.privmsg(channel, random.choice(refusals))
             return
-        
-        # Normal delivery (88% chance)
+
+        # Normal delivery
         delivery_actions = [
             "hands {recipient} a {thing}",
             "presents {recipient} with a lovely {thing}",
@@ -291,10 +324,10 @@ class MakeMePlugin:
             "ninja-delivers a {thing} to {recipient}",
             "teleports a {thing} directly to {recipient}"
         ]
-        
+
         action = random.choice(delivery_actions).format(recipient=recipient, thing=thing)
         await bot.action(channel, action)
-        
+
         # 15% chance of delivery commentary
         if random.random() < 0.15:
             comments = [
@@ -305,21 +338,21 @@ class MakeMePlugin:
                 "Delivered fresh today!",
                 "No returns or exchanges!",
                 "*adds delivery to resume*",
-                "Service with a smile! 😊",
+                "Service with a smile!",
                 "Another satisfied customer!",
                 "*stamps 'FRAGILE' on forehead*"
             ]
             await asyncio.sleep(0.7)
             await bot.privmsg(channel, random.choice(comments))
-    
+
     async def handle_action(self, bot, nick: str, channel: str, action: str) -> bool:
         """Handle /me actions - not used by this plugin"""
         return False
-    
+
     async def handle_join(self, bot, nick: str, channel: str):
         """Handle user joins - not used by this plugin"""
         pass
-    
+
     async def handle_part(self, bot, nick: str, channel: str, reason: str):
         """Handle user parts - not used by this plugin"""
         pass

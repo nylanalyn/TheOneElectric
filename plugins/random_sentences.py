@@ -147,8 +147,9 @@ class RandomSentencesPlugin:
             "{intro}, {subject} reserved {place_plain} just so they could {activity_infinitive} {thing}, and honestly everyone stayed {emotion} about it.",
         ]
         
-        # Track usage to balance variety
+        # Track usage to balance variety (capped to prevent unbounded growth)
         self.sentence_usage = {}
+        self._max_usage_entries = 500
         self.recent_sentences = deque(maxlen=8)
     
     def _generate_sentence(self) -> str:
@@ -204,7 +205,13 @@ class RandomSentencesPlugin:
         
         self.sentence_usage[selected] = self.sentence_usage.get(selected, 0) + 1
         self.recent_sentences.append(selected)
-        
+
+        # Prune oldest entries if dict grows too large
+        if len(self.sentence_usage) > self._max_usage_entries:
+            # Keep only the most-used half to preserve variety tracking
+            sorted_entries = sorted(self.sentence_usage.items(), key=lambda x: x[1], reverse=True)
+            self.sentence_usage = dict(sorted_entries[:self._max_usage_entries // 2])
+
         return selected
     
     async def handle_message(self, bot, nick: str, channel: str, message: str) -> bool:

@@ -1,22 +1,22 @@
 """
 Cancel Plugin for PyMotion
 Cancel people for silly reasons and dish out ridiculous punishments
+Cross-plugin combos: kill + stealth integration
 """
 
 import asyncio
 import random
 import re
 import logging
-from datetime import datetime
 
 class CancelPlugin:
     """Cancel people for silly reasons and dish out ridiculous punishments"""
-    
+
     def __init__(self):
         self.name = "cancel"
         self.priority = 65  # High priority to catch cancel commands
         self.enabled = True
-        
+
         # Silly accusations that would "cancel" someone
         self.accusations = [
             "using a light theme in their IDE",
@@ -50,7 +50,7 @@ class CancelPlugin:
             "using TikTok dances as their main form of communication",
             "saying 'based' unironically"
         ]
-        
+
         # Ridiculous punishments for cancelled streamers/youtubers
         self.punishments = [
             "must make a 47-minute ukulele apology video",
@@ -84,98 +84,126 @@ class CancelPlugin:
             "must make all content while speaking in rhyme",
             "has to stream with a laugh track playing randomly"
         ]
-        
+
         # Track active cancellations with timing
         self.active_cancellations = {}  # {channel: {target: task}}
-    
+
+    def _find_plugin(self, bot, name: str):
+        """Find a loaded plugin by name."""
+        for plugin in bot.plugins:
+            if getattr(plugin, 'name', None) == name:
+                return plugin
+        return None
+
     async def handle_message(self, bot, nick: str, channel: str, message: str) -> bool:
         """Handle message and check for cancel commands"""
         # Check if someone is trying to cancel someone
         bot_names = [bot.config['nick'].lower()] + [alias.lower() for alias in bot.config.get('aliases', [])]
-        
+
         logging.debug(f"Cancel plugin checking message in {channel}: {message}")
-        
+
         for bot_name in bot_names:
             cancel_match = re.search(rf'(?i)\b{re.escape(bot_name)}\b.*\bcancel\s+(\w+)', message)
             if cancel_match:
                 logging.debug(f"Found cancel command in {channel} from {nick}")
                 target = cancel_match.group(1)
-                
+
                 # Don't cancel the bot itself or the person doing the cancelling
                 if target.lower() == bot_name or target.lower() == nick.lower():
-                    await bot.privmsg(channel, f"Nice try, {nick}, but I'm uncancellable! 😎")
+                    await bot.privmsg(channel, f"Nice try, {nick}, but I'm uncancellable!")
                     return True
-                
+
                 # Cancel the target!
                 await self.cancel_user(bot, channel, nick, target)
                 return True
             else:
                 logging.debug(f"No cancel match found for bot_name: {bot_name}")
-        
+
         return False
-    
+
     async def handle_action(self, bot, nick: str, channel: str, action: str) -> bool:
         """Handle /me actions - not used by this plugin"""
         return False
-    
+
     async def handle_join(self, bot, nick: str, channel: str):
         """Handle user joins - not used by this plugin"""
         pass
-    
+
     async def handle_part(self, bot, nick: str, channel: str, reason: str):
         """Handle user parts - not used by this plugin"""
         pass
-    
+
     async def cancel_user(self, bot, channel: str, canceller: str, target: str):
         """Cancel a user and schedule their punishment"""
-        
+
         # Cancel any existing cancellation for this target in this channel
         if channel in self.active_cancellations and target in self.active_cancellations[channel]:
             self.active_cancellations[channel][target].cancel()
-        
+
+        # Check for stealth combo — reveal from shadows if hidden
+        stealth_plugin = self._find_plugin(bot, "stealth")
+        was_stealth = False
+        if stealth_plugin and hasattr(stealth_plugin, 'is_hidden') and stealth_plugin.is_hidden(channel):
+            was_stealth = await stealth_plugin.handle_stealth_attack(bot, channel, "cancellation")
+
         # Pick a random accusation
         accusation = random.choice(self.accusations)
-        
-        # Announce the cancellation
-        await bot.privmsg(channel, f"🚨 BREAKING: {target} has been CANCELLED! 🚨")
+
+        # Announce the cancellation (stealth flavor if applicable)
+        if was_stealth:
+            await bot.privmsg(channel, f"*cancels {target} FROM THE SHADOWS*")
+            await asyncio.sleep(0.5)
+        await bot.privmsg(channel, f"BREAKING: {target} has been CANCELLED!")
         await asyncio.sleep(1)  # Dramatic pause
         await bot.privmsg(channel, f"They have been accused of {accusation}!")
+
+        # 25% chance: cancel + kill combo
+        kill_plugin = self._find_plugin(bot, "kill")
+        if kill_plugin and random.random() < 0.25:
+            # Pick a weapon from the kill plugin's gentle tier (for comedic effect)
+            weapons = getattr(kill_plugin, 'weapons_gentle', [])
+            if weapons:
+                weapon = random.choice(weapons)
+                await asyncio.sleep(0.8)
+                await bot.action(channel, f"also pelts {target} with {weapon} for good measure")
+
         await bot.privmsg(channel, f"Punishment will be decided shortly... *dramatic music*")
-        
+
         # Schedule the punishment (2-4 minutes delay for maximum suspense)
         delay = random.randint(120, 240)  # 2-4 minutes
-        
+
         # Store the task so we can cancel it if needed
         if channel not in self.active_cancellations:
             self.active_cancellations[channel] = {}
-        
-        punishment_task = asyncio.create_task(
-            self.deliver_punishment(bot, channel, target, delay)
+
+        punishment_task = bot.create_background_task(
+            self.deliver_punishment(bot, channel, target, delay),
+            name=f"cancel_punishment_{channel}_{target}",
         )
         self.active_cancellations[channel][target] = punishment_task
-        
+
         logging.info(f"{canceller} cancelled {target} in {channel}, punishment in {delay} seconds")
-    
+
     async def deliver_punishment(self, bot, channel: str, target: str, delay: int):
         """Deliver the punishment after a delay"""
         try:
             await asyncio.sleep(delay)
-            
+
             # Pick a random punishment
             punishment = random.choice(self.punishments)
-            
+
             # Announce the punishment
-            await bot.privmsg(channel, f"⚖️ The Council has decided!")
+            await bot.privmsg(channel, f"The Council has decided!")
             await asyncio.sleep(1)
             await bot.privmsg(channel, f"{target}'s punishment: {punishment}")
-            await bot.privmsg(channel, f"May this serve as a warning to others! 😤")
-            
+            await bot.privmsg(channel, f"May this serve as a warning to others!")
+
             # Clean up the active cancellation
             if channel in self.active_cancellations and target in self.active_cancellations[channel]:
                 del self.active_cancellations[channel][target]
                 if not self.active_cancellations[channel]:
                     del self.active_cancellations[channel]
-                    
+
         except asyncio.CancelledError:
             # Cancellation was cancelled (probably by a new cancellation)
             logging.debug(f"Punishment for {target} in {channel} was cancelled")

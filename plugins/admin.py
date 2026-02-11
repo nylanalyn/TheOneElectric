@@ -5,7 +5,6 @@ Administrative commands for managing the bot
 
 import re
 import logging
-import sys
 
 class AdminPlugin:
     """Handle admin commands like reload"""
@@ -114,8 +113,9 @@ class AdminPlugin:
             await bot.privmsg(channel, "Shutting down...")
             await bot.send("QUIT :Shutdown requested by admin")
 
-            # Exit with code 42 to prevent systemd restart
-            sys.exit(42)
+            # Signal graceful shutdown — exit code 42 prevents systemd restart
+            bot.exit_code = 42
+            bot.connected = False
 
         return False
     

@@ -70,7 +70,7 @@ class LilJonPlugin:
             "BOUNCE!",
             "DROP IT!",
             "LET'S GET IT!",
-            "FIRE IT UP!"
+            "FIRE IT UP!",
             "It's a piece of cake to bake a pretty cake",
             "You gotta do the cooking by the book",
             "Never use a messy recipe",
@@ -95,24 +95,19 @@ class LilJonPlugin:
         if channel.lower() != self.target_channel.lower():
             return False
 
-        now = time.time()
-
         # Check for !GETCRUNK command (case insensitive)
         if message.strip().lower() == self.trigger_command:
+            now = time.time()
             if (now - self.last_triggered_time) > self.cooldown_duration:
                 quote = random.choice(self.quotes)
                 await bot.privmsg(channel, quote)
                 self.last_triggered_time = now
-            # Always return True in #crunk to block other plugins
             return True
 
-        # Return True to block all other plugins in #crunk
-        return True
+        # Let other plugins (admin, shutup, etc.) handle non-crunk messages
+        return False
 
     async def handle_action(self, bot, nick: str, channel: str, action: str) -> bool:
-        # Block other plugins in #crunk but don't respond to actions
-        if channel.lower() == self.target_channel.lower():
-            return True
         return False
 
     async def handle_join(self, bot, nick: str, channel: str):

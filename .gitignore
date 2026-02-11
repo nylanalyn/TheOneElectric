@@ -2,6 +2,7 @@ Vagrantfile
 pymotion.json
 __pycache__
 irc_traffic.log
+bot_state.json
 .python-version
 
 # Nix
