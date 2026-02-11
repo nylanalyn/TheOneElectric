@@ -273,22 +273,25 @@ class AIResponsePlugin:
         if not self._is_allowed_channel(channel):
             logging.debug(f"AI responses disabled in channel: {channel}")
             return False
-        
-        # Check cooldown
-        if self._is_on_cooldown(nick):
-            logging.debug(f"User {nick} is on cooldown for AI responses")
-            return False
-        
+
         # Get bot names
         bot_names = self._get_bot_names(bot)
-        
+
         # Check if message triggers AI response
         if not self._is_triggered(message, bot_names):
             return False
-        
+
+        # From here on, this plugin claims the message (returns True)
+        # to prevent other plugins from responding in AI-enabled channels
+
+        # Check cooldown
+        if self._is_on_cooldown(nick):
+            logging.debug(f"User {nick} is on cooldown for AI responses")
+            return True
+
         # Random chance to respond
         if random.random() > self.config['response_probability']:
-            return False
+            return True
         
         # Extract the actual prompt
         prompt = self._extract_prompt(message, bot_names)
